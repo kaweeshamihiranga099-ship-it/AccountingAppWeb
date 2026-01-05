@@ -1,4 +1,3 @@
-
 // =========================================
 // 1. GLOBAL CONFIG & FIREBASE
 // =========================================
@@ -23,21 +22,29 @@ try {
 } catch (e) { console.error("Firebase Init Error:", e); }
 
 // =========================================
-// 2. INITIALIZATION & AUTO DATA FIX
+// 2. INITIALIZATION & HELPER FUNCTIONS
 // =========================================
 window.addEventListener("load", function() {
-    // 1. Splash & Font
     let savedScale = localStorage.getItem("app_scale");
     if(savedScale) try { updateFontPreview(savedScale); } catch(e){}
+
+    fixDataIntegrity(); // Auto-fix spaces
+    
     setTimeout(function() {
         const splash = document.getElementById("splash-screen");
         if(splash) { splash.style.display = "none"; splash.classList.remove("active-screen"); }
         navigateToPassword();
     }, 2000);
-
-    // 2. AUTO FIX DATA (Trims spaces from Android Backup)
-    fixDataIntegrity();
 });
+
+// ✅ CORRECT DATE FUNCTION (Fixes the "Today" missing issue)
+function getLocalTodayDate() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 
 function fixDataIntegrity() {
     try {
@@ -49,7 +56,6 @@ function fixDataIntegrity() {
             let acc = JSON.parse(accStr) || {};
             let changed = false;
 
-            // Fix Accounts (Trim Names)
             for (let type in acc) {
                 acc[type] = acc[type].map(name => {
                     let clean = name.trim();
@@ -58,14 +64,11 @@ function fixDataIntegrity() {
                 });
             }
 
-            // Fix Transactions (Trim Account Refs)
             tr = tr.map(t => {
-                let d = t.dr_acc.trim();
-                let c = t.cr_acc.trim();
+                let d = t.dr_acc ? t.dr_acc.trim() : "";
+                let c = t.cr_acc ? t.cr_acc.trim() : "";
                 if(d !== t.dr_acc || c !== t.cr_acc) {
-                    t.dr_acc = d;
-                    t.cr_acc = c;
-                    changed = true;
+                    t.dr_acc = d; t.cr_acc = c; changed = true;
                 }
                 return t;
             });
@@ -73,7 +76,6 @@ function fixDataIntegrity() {
             if(changed) {
                 localStorage.setItem("transactions", JSON.stringify(tr));
                 localStorage.setItem("accounts", JSON.stringify(acc));
-                console.log("Data Auto-Fixed: Spaces Removed ✅");
             }
         }
     } catch(e) { console.error("Auto Fix Error:", e); }
@@ -100,7 +102,7 @@ function navigateTo(name) {
         if (name === 'accounts') initAccountScreen();
         if (name === 'reports') initReportsScreen();
         if (name === 'charts') initChartsScreen();
-        if (name === 'new_settings') initNewSettingsScreen();
+        if (name === 'new_settings' || name === 'new-settings') initNewSettingsScreen();
     }
 }
 
@@ -138,7 +140,7 @@ function handlePinSubmit() {
 function startChangePin() { state=1; updatePasswordUI(); }
 
 // =========================================
-// 4. HOME & TRANSACTIONS
+// 4. HOME & TRANSACTIONS (UPDATED)
 // =========================================
 function initHomeScreen() {
     let d=document.getElementById("spinDrType"), c=document.getElementById("spinCrType"); d.innerHTML=""; c.innerHTML="";
@@ -148,14 +150,11 @@ function initHomeScreen() {
 function updateAccountList(s) {
     let t = document.getElementById(s=='dr'?"spinDrType":"spinCrType").value;
     let a = document.getElementById(s=='dr'?"spinDrAcc":"spinCrAcc"); a.innerHTML="";
-    
     let all = {}; try { all = JSON.parse(localStorage.getItem("accounts")) || {}; } catch(e) { all = {}; }
     let h = []; try { h = JSON.parse(localStorage.getItem("hidden_accounts")) || []; } catch(e) {}
-
-    if(all[t]) {
-        all[t].forEach(n => { if(!h.includes(n)) a.innerHTML+=`<option>${n}</option>`; });
-    }
+    if(all[t]) all[t].forEach(n => { if(!h.includes(n)) a.innerHTML+=`<option>${n}</option>`; });
 }
+
 function saveTransaction() {
     let dt=document.getElementById("spinDrType").value, da=document.getElementById("spinDrAcc").value;
     let ct=document.getElementById("spinCrType").value, ca=document.getElementById("spinCrAcc").value;
@@ -164,7 +163,14 @@ function saveTransaction() {
     if(!da || !ca || !am) { showAlert("Error", "Missing Data!"); return; }
     
     let now=new Date(); 
-    let tr={year:now.getFullYear().toString(), month:(now.getMonth()+1).toString(), date:now.toISOString().split('T')[0], dr_type:dt, dr_acc:da, cr_type:ct, cr_acc:ca, amount:am, desc:de};
+    let tr={
+        year: now.getFullYear().toString(), 
+        month: (now.getMonth()+1).toString(), 
+        date: getLocalTodayDate(), // ✅ Using Local Date
+        dr_type:dt, dr_acc:da.trim(), 
+        cr_type:ct, cr_acc:ca.trim(), 
+        amount:am, desc:de
+    };
     
     let arr = []; try { arr = JSON.parse(localStorage.getItem("transactions")) || []; } catch(e) {}
     arr.push(tr); 
@@ -173,6 +179,7 @@ function saveTransaction() {
     showAlert("Success", "Saved! ✅"); 
     document.getElementById("edAmt").value=""; document.getElementById("edDesc").value="";
 }
+
 function setupLongPress() {
     let btn=document.getElementById("btnSave"); let timer;
     btn.addEventListener("touchstart", ()=>{ timer=setTimeout(()=>{navigateTo('new-settings')},1000); });
@@ -211,7 +218,6 @@ function deleteAccount() {
     if(!n) return;
     let tr = []; try { tr = JSON.parse(localStorage.getItem("transactions")) || []; } catch(e){}
     if(tr.some(x=>x.dr_acc===n||x.cr_acc===n)) { showAlert("Error","Cannot delete! Used in transactions."); return; }
-    
     let all = {}; try { all = JSON.parse(localStorage.getItem("accounts")) || {}; } catch(e){}
     all[t]=all[t].filter(x=>x!==n);
     localStorage.setItem("accounts", JSON.stringify(all)); 
@@ -219,40 +225,80 @@ function deleteAccount() {
 }
 
 // =========================================
-// 6. BACKUP & RESTORE (SMART)
+// 6. ADVANCED SETTINGS (TODAY'S TRANSACTIONS)
+// =========================================
+function initNewSettingsScreen() { renderTodayTransactions(); }
+function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
+function filterHideList() {
+    let s=document.getElementById("accSearch").value.toLowerCase(), l=document.getElementById("hideAccList"); l.innerHTML="";
+    let all={}; try{all=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
+    let h=[]; try{h=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
+    let flat=[]; Object.keys(all).forEach(k=>all[k].forEach(a=>flat.push(a))); flat.sort();
+    flat.forEach(a=>{
+        if(a.toLowerCase().includes(s)) {
+            let i=document.createElement("div"); i.style.padding="10px"; i.style.borderBottom="1px solid #eee";
+            i.innerHTML=`<label style="display:flex;align-items:center;"><input type="checkbox" value="${a}" ${h.includes(a)?"checked":""} onchange="toggleHiddenAccount(this)"><span style="margin-left:10px;">${a}</span></label>`;
+            l.appendChild(i);
+        }
+    });
+}
+function toggleHiddenAccount(cb) {
+    let a=cb.value, h=[]; try{h=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
+    if(cb.checked) { if(!h.includes(a)) h.push(a); } else { h=h.filter(x=>x!==a); }
+    localStorage.setItem("hidden_accounts", JSON.stringify(h));
+}
+function saveHiddenAccounts() { showAlert("Success","Saved!"); document.getElementById("hideAccModal").style.display="none"; }
+
+// ✅ RENDER TODAY'S TRANSACTIONS (FIXED)
+function renderTodayTransactions() {
+    let l=document.getElementById("todayTransList"); l.innerHTML="";
+    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
+    
+    // ✅ Use Local Date instead of UTC
+    let today = getLocalTodayDate(); 
+
+    let list=tr.map((t,i)=>({...t,idx:i})).filter(t=>t.date===today);
+    
+    if(list.length==0) { l.innerHTML="<p style='text-align:center;color:#999;'>No transactions today.</p>"; return; }
+    list.forEach(t=>{
+        let c=document.createElement("div"); c.style.cssText="background:white;padding:10px;margin-bottom:10px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);";
+        c.innerHTML=`<div style="display:flex;justify-content:space-between;font-weight:bold;"><span style="color:#006064;">${t.desc||"No Desc"}</span><span style="color:#004D40;">Rs. ${t.amount}</span></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:5px;"><span style="color:#D32F2F;">Dr: ${t.dr_acc}</span><span style="color:#388E3C;">Cr: ${t.cr_acc}</span></div><button onclick="deleteTransaction(${t.idx})" style="margin-top:5px;background:#FFEBEE;color:#D32F2F;border:none;padding:5px 10px;border-radius:4px;font-size:11px;">Delete 🗑️</button>`;
+        l.appendChild(c);
+    });
+}
+function deleteTransaction(idx) {
+    showAlert("Confirm", "Delete?", true, function() {
+        let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
+        tr.splice(idx,1);
+        localStorage.setItem("transactions", JSON.stringify(tr)); 
+        renderTodayTransactions(); showAlert("Success","Deleted!");
+    });
+}
+
+// =========================================
+// 7. BACKUP & RESTORE
 // =========================================
 function downloadBackup() {
-    let d={
-        accounts: localStorage.getItem("accounts"), 
-        transactions: localStorage.getItem("transactions"), 
-        hidden_accounts: localStorage.getItem("hidden_accounts")
-    };
+    let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
     let b=new Blob([JSON.stringify(d)],{type:"application/json"});
     let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     document.getElementById("backupStatus").innerText="Downloaded ✅";
 }
-
 function restoreBackup(i) {
     let f=i.files[0]; if(!f) return; let r=new FileReader();
     r.onload=e=>{ try{ processRestoreData(JSON.parse(e.target.result)); }catch(x){showAlert("Error","Invalid File!");} };
     r.readAsText(f);
 }
-
 function initFirebaseAndBackup() { let u=firebase.auth().currentUser; if(u) performCloudBackup(u.uid); else document.getElementById("loginModal").style.display="flex"; }
 function firebaseLogin() { auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Logged In!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
 function firebaseRegister() { auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Registered!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
 
 function performCloudBackup(uid) {
-    let fullData = {
-        transactions: localStorage.getItem("transactions") || "[]",
-        accounts: localStorage.getItem("accounts") || "{}",
-        hidden_accounts: localStorage.getItem("hidden_accounts") || "[]"
-    };
+    let fullData = { transactions: localStorage.getItem("transactions") || "[]", accounts: localStorage.getItem("accounts") || "{}", hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" };
     let jsonString = JSON.stringify(fullData);
     let dateStr = new Date().toLocaleString();
     let ts = Date.now();
     const ref = db.ref('users/' + uid + '/backups');
-    
     ref.once('value').then(snapshot => {
         let count = snapshot.numChildren();
         if (count >= 10) { let keys = Object.keys(snapshot.val() || {}); if(keys.length > 0) ref.child(keys[0]).remove(); }
@@ -262,14 +308,9 @@ function performCloudBackup(uid) {
     });
 }
 
-// =========================================
-// REPLACED RESTORE LOGIC (Paste this over old functions)
-// =========================================
-
 function restoreFromCloud() {
     let u = firebase.auth().currentUser;
-    if (!u) { showAlert("Error", "Please Login first!"); return; }
-    
+    if (!u) { showAlert("Error","Please Login first!"); return; }
     document.getElementById("restoreModal").style.display = "flex";
     const listDiv = document.getElementById("restoreList");
     listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
@@ -277,97 +318,71 @@ function restoreFromCloud() {
     db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value')
     .then(snapshot => {
         listDiv.innerHTML = "";
-        if (!snapshot.exists()) { 
-            listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; 
-            return; 
-        }
-        
+        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
         let backups = [];
-        snapshot.forEach(child => {
-            // Key එකත් එක්කම දත්ත ගන්න
-            let item = child.val();
-            item.key = child.key;
-            backups.unshift(item); 
-        });
-        
+        snapshot.forEach(child => { backups.unshift(child.val()); });
         backups.forEach(val => {
-            let btn = document.createElement("button");
-            btn.className = "action-btn btn-indigo";
-            btn.style.marginBottom = "10px";
-            // දිනය සහ වේලාව පෙන්වන්න
+            let btn = document.createElement("button"); btn.className = "action-btn btn-indigo"; btn.style.marginBottom = "10px";
             let dateLabel = val.date_label || new Date(val.timestamp).toLocaleString();
             btn.innerText = "📅 " + dateLabel;
-            
-            // Click කළාම දත්ත යවන්න (val.data එක String ද Object ද කියා නොබලා)
             btn.onclick = () => confirmRestore(val.data);
-            
             listDiv.appendChild(btn);
         });
-    })
-    .catch(error => {
-        listDiv.innerHTML = "<p style='text-align:center; color:red'>Error loading data.</p>";
-        console.error(error);
     });
 }
 
 function confirmRestore(rawData) {
-    showAlert("Confirm", "Restore this backup? Current data will be replaced.", true, function() {
+    showAlert("Confirm", "Restore this backup?", true, function() {
         try {
-            // දත්තය String එකක් නම් Parse කරන්න, නැත්නම් කෙලින්ම ගන්න
             let finalData = (typeof rawData === 'string') ? JSON.parse(rawData) : rawData;
-            
-            // සමහර විට Android එකෙන් Double Stringify වෙලා එන්න පුළුවන්
-            if (typeof finalData === 'string') {
-                try { finalData = JSON.parse(finalData); } catch(e) {}
-            }
-
+            if (typeof finalData === 'string') { try { finalData = JSON.parse(finalData); } catch(e) {} }
             processRestoreData(finalData);
-        } catch (e) { 
-            showAlert("Error", "Restore Failed: Data Corrupted.\n" + e.message); 
-        }
+        } catch (e) { showAlert("Error", "Restore Failed!"); }
     });
 }
 
 function processRestoreData(d) {
     try {
-        if (!d) throw new Error("Empty Data");
-
-        // Helper function to ensure we save strings to localStorage
         const saveToLocal = (key, data) => {
             if (!data) return;
-            if (typeof data === 'object') {
-                localStorage.setItem(key, JSON.stringify(data));
-            } else {
-                localStorage.setItem(key, data);
-            }
+            if (typeof data === 'object') localStorage.setItem(key, JSON.stringify(data));
+            else localStorage.setItem(key, data);
         };
-
-        // 1. Restore Transactions
         if (d.transactions) saveToLocal("transactions", d.transactions);
-        
-        // 2. Restore Accounts
         if (d.accounts) saveToLocal("accounts", d.accounts);
-        
-        // 3. Restore Hidden Accounts
         if (d.hidden_accounts) saveToLocal("hidden_accounts", d.hidden_accounts);
-
-        // 4. Auto Fix Spaces (අර කලින් දුන්න කේතය)
         fixDataIntegrity();
-
-        showAlert("Success", "Restored Successfully! App will reload.");
+        showAlert("Success", "Restored Successfully! Reloading...");
         setTimeout(() => location.reload(), 2000);
-
-    } catch(e) {
-        showAlert("Error", "Processing Error: " + e.message);
-    }
+    } catch(e) { showAlert("Error", "Data Error: " + e.message); }
 }
-
 
 function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
 function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
 
 // =========================================
-// 7. ACCOUNT VIEW & REPORTS (FIXED)
+// 8. ALERT SYSTEM
+// =========================================
+function showAlert(title, message, isConfirm = false, onYes = null) {
+    const modal = document.getElementById("customAlert");
+    if(!modal) { alert(message); return; }
+    document.getElementById("alertTitle").innerText = title;
+    document.getElementById("alertMessage").innerText = message;
+    const btnOk = document.getElementById("btnAlertOk");
+    const btnCancel = document.getElementById("btnAlertCancel");
+    if (isConfirm) {
+        btnCancel.style.display = "block"; btnOk.innerText = "Yes";
+        btnOk.onclick = function() { document.getElementById("customAlert").style.display = "none"; if (onYes) onYes(); };
+    } else {
+        btnCancel.style.display = "none"; btnOk.innerText = "OK";
+        btnOk.onclick = closeCustomAlert;
+    }
+    modal.style.display = "flex";
+}
+function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
+
+// =========================================
+// 9. ACCOUNTS & REPORTS
 // =========================================
 function initAccountScreen() {
     let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
@@ -382,53 +397,33 @@ function updateAccountFilterList() {
     if(all[t]) all[t].forEach(n=>{ if(!h.includes(n)) s.innerHTML+=`<option>${n}</option>`; });
 }
 function showAccountDetails() {
-    let ac=document.getElementById("accSelect").value;
-    let yr=document.getElementById("yearSelect").value;
-    let mo=document.getElementById("monthSelect").value;
-    if(!ac) return; 
-    
-    document.getElementById("tAccTitle").innerText=ac+" ("+yr+"/"+mo+")";
+    let ac=document.getElementById("accSelect").value, yr=document.getElementById("yearSelect").value, mo=document.getElementById("monthSelect").value;
+    if(!ac) return; document.getElementById("tAccTitle").innerText=ac+" ("+yr+"/"+mo+")";
     let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
     let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
     
     let td=0, tc=0, ob=0;
-    
-    // Calculate B/F
     tr.forEach(x=>{ 
         if(parseInt(x.year)<parseInt(yr)||(parseInt(x.year)==parseInt(yr)&&parseInt(x.month)<parseInt(mo))) { 
             let a=parseFloat(x.amount); 
-            // Loose comparison (Trimmed) handles data issues
-            if(x.dr_acc.trim() == ac.trim()) ob+=a; 
-            if(x.cr_acc.trim() == ac.trim()) ob-=a; 
+            if(x.dr_acc.trim()==ac.trim()) ob+=a; if(x.cr_acc.trim()==ac.trim()) ob-=a; 
         } 
     });
-
     if(ob!=0) { 
         let d=document.createElement("div"); d.className="t-item t-bf"; 
         d.innerText="B/F : "+Math.abs(ob).toFixed(2); 
         if(ob>0){dr.appendChild(d); td+=ob;} else{cr.appendChild(d); tc+=Math.abs(ob);} 
     }
-
-    // List Transactions
     tr.forEach(x=>{ 
         if(x.year==yr && x.month==mo) { 
-            let a=parseFloat(x.amount);
-            let d=document.createElement("div"); d.className="t-item"; 
+            let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; 
             d.onclick=()=>showAlert("Details",x.desc); 
-            
-            if(x.dr_acc.trim() == ac.trim()){
-                d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a;
-            } else if(x.cr_acc.trim() == ac.trim()){
-                d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a;
-            } 
+            if(x.dr_acc.trim()==ac.trim()){d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a;}
+            else if(x.cr_acc.trim()==ac.trim()){d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a;} 
         } 
     });
-
-    document.getElementById("drTotal").innerText=td.toFixed(2); 
-    document.getElementById("crTotal").innerText=tc.toFixed(2);
-    let b=td-tc, bb=document.getElementById("finalBalanceBox"); 
-    bb.innerText="Balance c/d: "+b.toFixed(2); 
-    bb.style.backgroundColor=b>=0?"#4CAF50":"#F44336";
+    document.getElementById("drTotal").innerText=td.toFixed(2); document.getElementById("crTotal").innerText=tc.toFixed(2);
+    let b=td-tc, bb=document.getElementById("finalBalanceBox"); bb.innerText="Balance c/d: "+b.toFixed(2); bb.style.backgroundColor=b>=0?"#4CAF50":"#F44336";
 }
 
 function initReportsScreen() {
@@ -440,14 +435,12 @@ function generateReport() {
     let sY = parseInt(document.getElementById("repYear").value);
     let sM = parseInt(document.getElementById("repMonth").value);
     let output = document.getElementById("report-output");
-    
     let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
     let accounts={}; try{accounts=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
     let hidden=[]; try{hidden=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
     
     let html = `<div style="text-align:center; margin-bottom:20px;"><h2>MY LEDGER - FULL REPORT</h2><p>Year: ${sY} | Month: ${sM}</p></div><hr>`;
 
-    // 1. TRIAL BALANCE
     html += `<div class="report-section"><h3 class="text-center">1. TRIAL BALANCE</h3><table class="tb-table"><thead><tr><th>Account Name</th><th>Dr</th><th>Cr</th></tr></thead><tbody>`;
     let totTbDr = 0, totTbCr = 0, allAccNames = [];
     Object.keys(accounts).forEach(type => { accounts[type].forEach(acc => { if(!hidden.includes(acc)) allAccNames.push(acc); }); });
@@ -459,8 +452,7 @@ function generateReport() {
             let tY = parseInt(t.year), tM = parseInt(t.month);
             if (tY < sY || (tY == sY && tM <= sM)) {
                 let a = parseFloat(t.amount);
-                if (t.dr_acc.trim() == acc.trim()) bal += a; 
-                if (t.cr_acc.trim() == acc.trim()) bal -= a;
+                if (t.dr_acc.trim() == acc.trim()) bal += a; if (t.cr_acc.trim() == acc.trim()) bal -= a;
             }
         });
         if (bal !== 0) {
@@ -470,17 +462,12 @@ function generateReport() {
     });
     html += `<tr class="bold" style="background:#f0f0f0;"><td>TOTALS</td><td class="text-right">${totTbDr.toFixed(2)}</td><td class="text-right">${totTbCr.toFixed(2)}</td></tr></tbody></table></div>`;
 
-    // 2. LEDGERS
     html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">2. GENERAL LEDGER</h3>`;
     allAccNames.forEach(acc => {
         let openBal = 0;
         tr.forEach(t => {
             let tY = parseInt(t.year), tM = parseInt(t.month);
-            if (tY < sY || (tY == sY && tM < sM)) { 
-                let a = parseFloat(t.amount); 
-                if (t.dr_acc.trim() == acc.trim()) openBal += a; 
-                if (t.cr_acc.trim() == acc.trim()) openBal -= a; 
-            }
+            if (tY < sY || (tY == sY && tM < sM)) { let a = parseFloat(t.amount); if (t.dr_acc.trim() == acc.trim()) openBal += a; if (t.cr_acc.trim() == acc.trim()) openBal -= a; }
         });
         let drHtml = "", crHtml = "", monthDr = 0, monthCr = 0;
         if (openBal !== 0) {
@@ -501,7 +488,6 @@ function generateReport() {
         }
     });
 
-    // 3. FINAL ACCOUNTS
     html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">3. FINANCIAL STATEMENTS</h3>`;
     let ta=0, tl=0, te=0, ti=0, tx=0;
     tr.forEach(t => {
@@ -524,75 +510,12 @@ function printReport() {
     else { alert("ඔබට pdf එකක් අවශ්‍යනම් හෝ Android app එක බාගත කර ගැනීමට අවශ්‍ය නම් +94 715527239 යන Whatsapp අංකයට දැනුම් දෙන්න. ස්තූතියි 😊"); }
 }
 
-// New Settings
-function initNewSettingsScreen() { renderTodayTransactions(); }
-function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
-function filterHideList() {
-    let s=document.getElementById("accSearch").value.toLowerCase(), l=document.getElementById("hideAccList"); l.innerHTML="";
-    let all={}; try{all=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
-    let h=[]; try{h=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
-    let flat=[]; Object.keys(all).forEach(k=>all[k].forEach(a=>flat.push(a))); flat.sort();
-    flat.forEach(a=>{
-        if(a.toLowerCase().includes(s)) {
-            let i=document.createElement("div"); i.style.padding="10px"; i.style.borderBottom="1px solid #eee";
-            i.innerHTML=`<label style="display:flex;align-items:center;"><input type="checkbox" value="${a}" ${h.includes(a)?"checked":""} onchange="toggleHiddenAccount(this)"><span style="margin-left:10px;">${a}</span></label>`;
-            l.appendChild(i);
-        }
-    });
-}
-function toggleHiddenAccount(cb) {
-    let a=cb.value, h=[]; try{h=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
-    if(cb.checked) { if(!h.includes(a)) h.push(a); } else { h=h.filter(x=>x!==a); }
-    localStorage.setItem("hidden_accounts", JSON.stringify(h));
-}
-function saveHiddenAccounts() { showAlert("Success","Saved!"); document.getElementById("hideAccModal").style.display="none"; }
-function renderTodayTransactions() {
-    let l=document.getElementById("todayTransList"); l.innerHTML="";
-    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
-    let today=new Date().toISOString().split('T')[0];
-    let list=tr.map((t,i)=>({...t,idx:i})).filter(t=>t.date===today);
-    if(list.length==0) { l.innerHTML="<p style='text-align:center;color:#999;'>No transactions today.</p>"; return; }
-    list.forEach(t=>{
-        let c=document.createElement("div"); c.style.cssText="background:white;padding:10px;margin-bottom:10px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);";
-        c.innerHTML=`<div style="display:flex;justify-content:space-between;font-weight:bold;"><span style="color:#006064;">${t.desc||"No Desc"}</span><span style="color:#004D40;">Rs. ${t.amount}</span></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:5px;"><span style="color:#D32F2F;">Dr: ${t.dr_acc}</span><span style="color:#388E3C;">Cr: ${t.cr_acc}</span></div><button onclick="deleteTransaction(${t.idx})" style="margin-top:5px;background:#FFEBEE;color:#D32F2F;border:none;padding:5px 10px;border-radius:4px;font-size:11px;">Delete 🗑️</button>`;
-        l.appendChild(c);
-    });
-}
-function deleteTransaction(idx) {
-    showAlert("Confirm", "Delete?", true, function() {
-        let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
-        tr.splice(idx,1);
-        localStorage.setItem("transactions", JSON.stringify(tr)); 
-        renderTodayTransactions(); showAlert("Success","Deleted!");
-    });
-}
-
 function initChartsScreen() {
     let c=document.getElementById("chartsContainer"); c.innerHTML="Loading...";
     let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
     let ti=0, te=0;
     tr.forEach(t=>{ let a=parseFloat(t.amount); if(t.cr_type=="ආදායම්")ti+=a; if(t.dr_type=="වියදම්")te+=a; });
-    
     c.innerHTML=`<div class="settings-card"><h3>Income vs Expense</h3><canvas id="c1"></canvas></div>`;
     setTimeout(()=>{ new Chart(document.getElementById('c1'), {type:'pie',data:{labels:['Inc','Exp'],datasets:[{data:[ti,te],backgroundColor:['#4CAF50','#F44336']}]}}); }, 500);
 }
 
-// ALERT SYSTEM
-function showAlert(title, message, isConfirm = false, onYes = null) {
-    const modal = document.getElementById("customAlert");
-    if(!modal) { alert(message); return; }
-    document.getElementById("alertTitle").innerText = title;
-    document.getElementById("alertMessage").innerText = message;
-    const btnOk = document.getElementById("btnAlertOk");
-    const btnCancel = document.getElementById("btnAlertCancel");
-
-    if (isConfirm) {
-        btnCancel.style.display = "block"; btnOk.innerText = "Yes";
-        btnOk.onclick = function() { document.getElementById("customAlert").style.display = "none"; if (onYes) onYes(); };
-    } else {
-        btnCancel.style.display = "none"; btnOk.innerText = "OK";
-        btnOk.onclick = closeCustomAlert;
-    }
-    modal.style.display = "flex";
-}
-function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
