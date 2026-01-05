@@ -410,7 +410,7 @@ function closeCustomAlert() { document.getElementById("customAlert").style.displ
 function initAccountScreen() {
     let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
     accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
-    for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
+    for(let i=2026;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
     document.getElementById("monthSelect").value=new Date().getMonth()+1; updateAccountFilterList();
 }
 function updateAccountFilterList() {
@@ -450,7 +450,7 @@ function showAccountDetails() {
 }
 
 function initReportsScreen() {
-    let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
+    let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2026;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
     document.getElementById("repMonth").value=new Date().getMonth()+1;
 }
 
