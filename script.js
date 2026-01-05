@@ -7,6 +7,7 @@ const savedPinKey = "user_pin";
 const colorModeKey = "ColorMode";
 let currentPin = "", state = 0, tempNewPin = "";
 
+// Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDWCPkJB3VRkuLSIeDnE1Mk6z3YUPLMEnU",
     authDomain: "super-a0398-default-rtdb.firebaseapp.com",
@@ -37,20 +38,28 @@ document.addEventListener("DOMContentLoaded", function() {
 
 function navigateTo(name) {
     document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+    
+    // ID Mapping Fixes
     let id = name + "-screen";
-    if (name === 'accounts') id = "account-screen";
+    if (name === 'accounts') id = "account-screen"; // Fix plural/singular
     if (name === 'new-settings' || name === 'new_settings') id = "new-settings-screen";
 
     let el = document.getElementById(id);
     if (el) {
         let cm = localStorage.getItem(colorModeKey) !== "false";
+        
+        // Display Logic
         el.style.display = (name === 'password') ? 'flex' : 'block';
+
+        // Gradient Background Logic
         if (["home", "settings", "account", "accounts", "reports", "new-settings"].includes(name)) {
             el.style.background = cm ? "linear-gradient(to bottom, #18FFFF, #E040FB, #FFFFFF, #E040FB, #76FF03)" : "#FFFFFF";
         }
+
+        // Initialize specific screens
         if (name === 'home') initHomeScreen();
         if (name === 'settings') initSettingsScreen();
-        if (name === 'accounts') initAccountScreen();
+        if (name === 'accounts' || name === 'account') initAccountScreen();
         if (name === 'reports') initReportsScreen();
         if (name === 'charts') initChartsScreen();
         if (name === 'new_settings' || name === 'new-settings') initNewSettingsScreen();
@@ -150,7 +159,7 @@ function deleteAccount() {
     localStorage.setItem("accounts", JSON.stringify(all)); alert("Deleted!"); updateDelList();
 }
 
-// New Settings
+// New Settings (Advanced)
 function initNewSettingsScreen() { renderTodayTransactions(); }
 function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
 function filterHideList() {
@@ -303,18 +312,7 @@ function initReportsScreen() {
     document.getElementById("repMonth").value=new Date().getMonth()+1;
 }
 
-// --- FULL REPORT GENERATOR (REPLACED) ---
-function generateReport() {
-    let sY = parseInt(document.getElementById("repYear").value);
-    let sM = parseInt(document.getElementById("repMonth").value);
-    let output = document.getElementById("report-output");
-    let tr = JSON.parse(localStorage.getItem("transactions")) || [];
-    let accounts = JSON.parse(localStorage.getItem("accounts")) || {};
-    let hidden = JSON.parse(localStorage.getItem("hidden_accounts")) || [];
-    
-    let html = `<h2 class="text-center">FULL FINANCIAL REPORT</h2><p class="text-center">Year: ${sY} | Month: ${sM}</p><hr>`;
-// Script.js එකේ generateReport function එක මෙලෙස යාවත්කාලීන කරන්න
-
+// FULL REPORT GENERATOR
 function generateReport() {
     let sY = parseInt(document.getElementById("repYear").value);
     let sM = parseInt(document.getElementById("repMonth").value);
@@ -324,27 +322,12 @@ function generateReport() {
     let accounts = JSON.parse(localStorage.getItem("accounts")) || {};
     let hidden = JSON.parse(localStorage.getItem("hidden_accounts")) || [];
     
-    // HTML Builder
-    let html = `<div style="text-align:center; margin-bottom:20px;">
-                    <h2>MY LEDGER - FULL REPORT</h2>
-                    <p>Year: ${sY} | Month: ${sM}</p>
-                    <p>Generated on: ${new Date().toLocaleString()}</p>
-                </div><hr>`;
+    // Header
+    let html = `<div style="text-align:center; margin-bottom:20px;"><h2>MY LEDGER - FULL REPORT</h2><p>Year: ${sY} | Month: ${sM}</p><p>Generated on: ${new Date().toLocaleString()}</p></div><hr>`;
 
-    // ---------------------------------------------------
     // 1. TRIAL BALANCE
-    // ---------------------------------------------------
-    html += `<div class="report-section">`;
-    html += `<h3 class="text-center" style="margin-top:20px;">1. TRIAL BALANCE</h3>`;
-    html += `<table style="width:100%; border-collapse:collapse; margin-top:10px;">
-                <thead>
-                    <tr style="background:#eee;">
-                        <th style="border:1px solid #000; padding:5px;">Account Name</th>
-                        <th style="border:1px solid #000; padding:5px;">Dr (හර)</th>
-                        <th style="border:1px solid #000; padding:5px;">Cr (බැර)</th>
-                    </tr>
-                </thead><tbody>`;
-
+    html += `<div class="report-section"><h3 class="text-center" style="margin-top:20px;">1. TRIAL BALANCE</h3><table style="width:100%; border-collapse:collapse; margin-top:10px;"><thead><tr style="background:#eee;"><th style="border:1px solid #000; padding:5px;">Account Name</th><th style="border:1px solid #000; padding:5px;">Dr</th><th style="border:1px solid #000; padding:5px;">Cr</th></tr></thead><tbody>`;
+    
     let totTbDr = 0, totTbCr = 0, allAccNames = [];
     Object.keys(accounts).forEach(type => { accounts[type].forEach(acc => { if(!hidden.includes(acc)) allAccNames.push(acc); }); });
     allAccNames.sort();
@@ -362,26 +345,14 @@ function generateReport() {
 
         if (bal !== 0) {
             if (bal > 0) totTbDr += bal; else totTbCr += Math.abs(bal);
-            html += `<tr>
-                <td style="border:1px solid #000; padding:5px;">${acc}</td>
-                <td style="border:1px solid #000; padding:5px; text-align:right;">${bal > 0 ? bal.toFixed(2) : ""}</td>
-                <td style="border:1px solid #000; padding:5px; text-align:right;">${bal < 0 ? Math.abs(bal).toFixed(2) : ""}</td>
-            </tr>`;
+            html += `<tr><td style="border:1px solid #000; padding:5px;">${acc}</td><td style="border:1px solid #000; padding:5px; text-align:right;">${bal > 0 ? bal.toFixed(2) : ""}</td><td style="border:1px solid #000; padding:5px; text-align:right;">${bal < 0 ? Math.abs(bal).toFixed(2) : ""}</td></tr>`;
         }
     });
 
-    html += `<tr style="font-weight:bold; background:#f0f0f0;">
-        <td style="border:1px solid #000; padding:5px;">TOTALS</td>
-        <td style="border:1px solid #000; padding:5px; text-align:right;">${totTbDr.toFixed(2)}</td>
-        <td style="border:1px solid #000; padding:5px; text-align:right;">${totTbCr.toFixed(2)}</td>
-    </tr></tbody></table></div>`;
+    html += `<tr style="font-weight:bold; background:#f0f0f0;"><td style="border:1px solid #000; padding:5px;">TOTALS</td><td style="border:1px solid #000; padding:5px; text-align:right;">${totTbDr.toFixed(2)}</td><td style="border:1px solid #000; padding:5px; text-align:right;">${totTbCr.toFixed(2)}</td></tr></tbody></table></div>`;
 
-
-    // ---------------------------------------------------
     // 2. LEDGERS
-    // ---------------------------------------------------
-    html += `<div class="print-page-break"></div>`; 
-    html += `<h3 class="text-center" style="margin-top:20px;">2. GENERAL LEDGER</h3>`;
+    html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">2. GENERAL LEDGER</h3>`;
 
     allAccNames.forEach(acc => {
         let openBal = 0;
@@ -416,36 +387,12 @@ function generateReport() {
 
         if (openBal !== 0 || hasTrans) {
             let finalBal = monthDr - monthCr;
-            
-            html += `<div class="t-account-container" style="margin-top:15px; border:1px solid #000; page-break-inside:avoid;">
-                <div style="background:#ddd; padding:5px; text-align:center; font-weight:bold; border-bottom:1px solid #000;">${acc}</div>
-                <div style="display:flex;">
-                    <div style="flex:1; border-right:1px solid #000;">
-                        <div style="background:#eee; text-align:center; font-weight:bold; border-bottom:1px solid #000;">Dr</div>
-                        <div style="padding:5px;">${drHtml}</div>
-                    </div>
-                    <div style="flex:1;">
-                        <div style="background:#eee; text-align:center; font-weight:bold; border-bottom:1px solid #000;">Cr</div>
-                        <div style="padding:5px;">${crHtml}</div>
-                    </div>
-                </div>
-                <div style="display:flex; border-top:1px solid #000; font-weight:bold; background:#f9f9f9;">
-                    <div style="flex:1; text-align:center; padding:5px; border-right:1px solid #000;">${monthDr.toFixed(2)}</div>
-                    <div style="flex:1; text-align:center; padding:5px;">${monthCr.toFixed(2)}</div>
-                </div>
-                <div style="text-align:center; padding:5px; border-top:1px solid #000; font-weight:bold;">
-                    Balance c/d: ${finalBal.toFixed(2)}
-                </div>
-            </div>`;
+            html += `<div class="t-account-container" style="margin-top:15px; border:1px solid #000; page-break-inside:avoid;"><div style="background:#ddd; padding:5px; text-align:center; font-weight:bold; border-bottom:1px solid #000;">${acc}</div><div style="display:flex;"><div style="flex:1; border-right:1px solid #000;"><div style="background:#eee; text-align:center; font-weight:bold; border-bottom:1px solid #000;">Dr</div><div style="padding:5px;">${drHtml}</div></div><div style="flex:1;"><div style="background:#eee; text-align:center; font-weight:bold; border-bottom:1px solid #000;">Cr</div><div style="padding:5px;">${crHtml}</div></div></div><div style="display:flex; border-top:1px solid #000; font-weight:bold; background:#f9f9f9;"><div style="flex:1; text-align:center; padding:5px; border-right:1px solid #000;">${monthDr.toFixed(2)}</div><div style="flex:1; text-align:center; padding:5px;">${monthCr.toFixed(2)}</div></div><div style="text-align:center; padding:5px; border-top:1px solid #000; font-weight:bold;">Balance c/d: ${finalBal.toFixed(2)}</div></div>`;
         }
     });
 
-    // ---------------------------------------------------
     // 3. FINANCIAL STATEMENTS
-    // ---------------------------------------------------
-    html += `<div class="print-page-break"></div>`;
-    html += `<h3 class="text-center" style="margin-top:20px;">3. FINANCIAL STATEMENTS</h3>`;
-
+    html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">3. FINANCIAL STATEMENTS</h3>`;
     let ta=0, tl=0, te=0, ti=0, tx=0;
     tr.forEach(t => {
         let tY=parseInt(t.year), tM=parseInt(t.month);
@@ -455,32 +402,9 @@ function generateReport() {
             if(t.cr_type=="වත්කම්") ta-=a; if(t.cr_type=="වියදම්") tx-=a; if(t.cr_type=="වගකීම්") tl+=a; if(t.cr_type=="හිමිකම්") te+=a; if(t.cr_type=="ආදායම්") ti+=a;
         }
     });
+    let netAssets = ta - tl, netProfit = ti - tx, trueEquity = te + netProfit;
 
-    let netAssets = ta - tl;
-    let netProfit = ti - tx;
-    let trueEquity = te + netProfit;
-
-    html += `<div style="border:1px solid #000; padding:15px; margin-top:10px;">
-        <p><strong>INCOME STATEMENT</strong></p>
-        <p>Total Income: <span style="float:right">${ti.toFixed(2)}</span></p>
-        <p>Total Expenses: <span style="float:right">(${tx.toFixed(2)})</span></p>
-        <hr>
-        <p><strong>NET PROFIT: <span style="float:right">${netProfit.toFixed(2)}</span></strong></p>
-        <br>
-        
-        <p><strong>FINANCIAL POSITION</strong></p>
-        <p>Total Assets: <span style="float:right">${ta.toFixed(2)}</span></p>
-        <p>(-) Liabilities: <span style="float:right">(${tl.toFixed(2)})</span></p>
-        <hr>
-        <p><strong>NET ASSETS: <span style="float:right">${netAssets.toFixed(2)}</span></strong></p>
-        <br>
-
-        <p><strong>EQUITY CHECK</strong></p>
-        <p>Capital B/F: <span style="float:right">${te.toFixed(2)}</span></p>
-        <p>(+) Net Profit: <span style="float:right">${netProfit.toFixed(2)}</span></p>
-        <hr>
-        <p><strong>TOTAL EQUITY: <span style="float:right">${trueEquity.toFixed(2)}</span></strong></p>
-    </div>`;
+    html += `<div style="border:1px solid #000; padding:15px; margin-top:10px;"><p><strong>INCOME STATEMENT</strong></p><p>Total Income: <span style="float:right">${ti.toFixed(2)}</span></p><p>Total Expenses: <span style="float:right">(${tx.toFixed(2)})</span></p><hr><p><strong>NET PROFIT: <span style="float:right">${netProfit.toFixed(2)}</span></strong></p><br><p><strong>FINANCIAL POSITION</strong></p><p>Total Assets: <span style="float:right">${ta.toFixed(2)}</span></p><p>(-) Liabilities: <span style="float:right">(${tl.toFixed(2)})</span></p><hr><p><strong>NET ASSETS: <span style="float:right">${netAssets.toFixed(2)}</span></strong></p><br><p><strong>EQUITY CHECK</strong></p><p>Capital B/F: <span style="float:right">${te.toFixed(2)}</span></p><p>(+) Net Profit: <span style="float:right">${netProfit.toFixed(2)}</span></p><hr><p><strong>TOTAL EQUITY: <span style="float:right">${trueEquity.toFixed(2)}</span></strong></p></div>`;
 
     output.innerHTML = html;
 }
