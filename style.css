@@ -1,0 +1,343 @@
+/* =========================================
+   1. GLOBAL STYLES & RESET
+   ========================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', sans-serif;
+    user-select: none; /* Text select වීම වළක්වයි */
+    -webkit-tap-highlight-color: transparent; /* Click color ඉවත් කිරීම */
+}
+
+body {
+    overflow: hidden; /* Scroll වීම වළක්වයි */
+    background-color: #000;
+    width: 100%;
+    height: 100vh;
+}
+
+/* Screen Management (SPA Structure) */
+.screen {
+    width: 100%;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none; /* Default hidden */
+    flex-direction: column;
+    overflow-y: auto; /* අන්තර්ගතය දිග නම් Scroll වීමට */
+}
+
+.active-screen {
+    display: flex !important;
+}
+
+/* පොදු බොත්තම් විලාසය */
+.action-btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: transform 0.1s;
+}
+.action-btn:active { transform: scale(0.98); }
+
+/* වර්ණ පන්තීන් (Color Classes) */
+.btn-blue { background-color: #2196F3; }
+.btn-red { background-color: #F44336; }
+.btn-green { background-color: #4CAF50; }
+.btn-orange { background-color: #FF9800; }
+.btn-purple { background-color: #9C27B0; }
+.btn-indigo { background-color: #3F51B5; }
+.btn-cyan { background-color: #00BCD4; color: white; }
+
+/* ආපසු යන බොත්තම */
+.back-btn {
+    background: transparent;
+    border: 1px solid #555;
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 10px;
+    width: fit-content;
+    cursor: pointer;
+}
+
+/* =========================================
+   2. SPLASH SCREEN
+   ========================================= */
+#splash-screen {
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(to bottom, #18FFFF, #E040FB, #000000, #E040FB, #76FF03);
+    color: white;
+    text-align: center;
+    z-index: 999;
+}
+
+.splash-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.app-logo {
+    width: 100px;
+    height: 100px;
+    border-radius: 20px;
+    background: white;
+    object-fit: cover;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+.app-title {
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+}
+
+/* Loading Animation */
+.loader { width: 40px; height: 40px; }
+.loader svg { animation: rotate 2s linear infinite; width: 100%; height: 100%; }
+.loader .path {
+    stroke: #76FF03;
+    stroke-linecap: round;
+    animation: dash 1.5s ease-in-out infinite;
+}
+@keyframes rotate { 100% { transform: rotate(360deg); } }
+@keyframes dash {
+    0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+    50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+    100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
+/* =========================================
+   3. PASSWORD SCREEN
+   ========================================= */
+#password-screen {
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Switch Toggle */
+.switch-container {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 10;
+}
+.switch-label { font-size: 12px; font-weight: bold; }
+
+.toggle-switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc; transition: .4s; border-radius: 34px;
+}
+.slider:before {
+    position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px;
+    background-color: white; transition: .4s; border-radius: 50%;
+}
+input:checked + .slider { background-color: #2196F3; }
+input:checked + .slider:before { transform: translateX(20px); }
+
+/* PIN Dots */
+.password-header { text-align: center; margin-bottom: 30px; margin-top: 40px; }
+.password-header h2 { font-size: 26px; margin-bottom: 5px; }
+.password-header p { font-size: 14px; opacity: 0.8; }
+
+.dots-container { display: flex; gap: 15px; margin-bottom: 30px; }
+.dot {
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    background: transparent;
+    transition: background 0.2s;
+}
+.dot.filled { background: currentColor; }
+
+/* Keypad Grid */
+.keypad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 300px;
+}
+
+.keypad-grid button {
+    width: 70px; height: 70px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.2);
+    color: inherit;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.keypad-grid button:active { transform: scale(0.90); background: rgba(255,255,255,0.4); }
+
+.text-btn {
+    margin-top: 30px; background: none; border: none;
+    color: inherit; text-decoration: underline; cursor: pointer; font-size: 14px;
+}
+
+/* =========================================
+   4. HOME SCREEN
+   ========================================= */
+.nav-bar { display: flex; gap: 5px; margin-bottom: 10px; }
+.nav-btn {
+    flex: 1; padding: 12px; border: none; border-radius: 8px;
+    color: white; font-weight: bold; font-size: 13px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.btn-settings { background-color: #616161; }
+.btn-accounts { background-color: #2196F3; }
+.btn-reports { background-color: #4CAF50; }
+
+.form-container {
+    background: rgba(255,255,255,0.95);
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    border: 1px solid #ddd;
+}
+.form-label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; font-size: 14px; }
+.form-select, .form-input {
+    width: 100%; padding: 12px; margin-bottom: 10px;
+    border: 1px solid #ccc; border-radius: 6px; font-size: 16px;
+    background: white;
+}
+.save-btn {
+    width: 100%; padding: 14px; background-color: #000; color: white;
+    font-weight: bold; border: none; border-radius: 6px; font-size: 16px;
+    margin-top: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+/* Rules Table */
+.rules-box {
+    background: white; padding: 10px; border-radius: 8px;
+    margin-bottom: 50px; border: 1px solid #eee;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+.rules-box table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rules-box th { background-color: #607D8B; color: white; padding: 8px; }
+.rules-box td { padding: 8px; border: 1px solid #ccc; text-align: center; }
+.dr { color: green; font-weight: bold; }
+.cr { color: red; font-weight: bold; }
+
+/* =========================================
+   5. SETTINGS SCREEN
+   ========================================= */
+.settings-card {
+    background: white; padding: 15px; border-radius: 12px;
+    margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid #eee;
+}
+.settings-card h3 {
+    margin-top: 0; font-size: 16px; color: #333;
+    border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 12px;
+}
+
+/* =========================================
+   6. ACCOUNT SCREEN (T-Account)
+   ========================================= */
+.filters-box {
+    background: white; padding: 15px; border-radius: 12px;
+    border: 1px solid #ddd; margin-bottom: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.t-account-container {
+    border: 2px solid #333; border-radius: 8px; background: white;
+    margin-bottom: 20px; overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.t-header {
+    display: flex; background-color: #4CAF50; color: white;
+    border-bottom: 2px solid #333;
+}
+.t-col { flex: 1; text-align: center; padding: 10px; font-weight: bold; }
+.dr-col { border-right: 1px solid #fff; background-color: #FFEB3B; color: black; }
+.cr-col { background-color: #FFEB3B; color: black; }
+
+.t-body { display: flex; min-height: 200px; position: relative; }
+.t-col-content { flex: 1; padding: 5px; }
+.t-divider { width: 2px; background-color: black; }
+
+.t-item {
+    font-size: 12px; padding: 6px; border-bottom: 1px dashed #eee;
+    margin-bottom: 2px; cursor: pointer;
+}
+.t-item:hover { background-color: #f0f0f0; }
+.t-bf {
+    color: blue; font-weight: bold; font-size: 12px;
+    background-color: #e3f2fd; padding: 5px; margin-bottom: 5px; border-radius: 3px;
+}
+
+.t-footer { display: flex; border-top: 2px solid #333; background-color: #f9f9f9; }
+.t-total { flex: 1; text-align: center; padding: 10px; font-weight: bold; font-size: 14px; }
+
+.balance-box {
+    text-align: center; font-size: 18px; font-weight: bold;
+    padding: 15px; background-color: #333; color: white;
+    border-radius: 8px; margin-top: 10px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* =========================================
+   7. REPORTS SCREEN
+   ========================================= */
+.report-paper {
+    background: white; padding: 20px;
+    border: 1px solid #ccc; border-radius: 5px;
+    min-height: 300px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px; color: #000;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    white-space: pre-wrap; line-height: 1.5;
+}
+
+/* =========================================
+   8. MODALS & POPUPS
+   ========================================= */
+/* Login & Hide Account Modals are handled via inline styles in HTML, 
+   but specific input styles here ensure consistency */
+#loginModal input, #hideAccModal input[type="text"] {
+    margin-bottom: 15px;
+}
+
+/* =========================================
+   9. PRINT STYLES (For PDF Generation)
+   ========================================= */
+@media print {
+    body * { visibility: hidden; }
+    #reports-screen, #reports-screen * { visibility: visible; }
+    #reports-screen {
+        position: absolute; left: 0; top: 0; width: 100%; height: auto;
+        background: white !important; overflow: visible;
+    }
+    .back-btn, .filters-box { display: none !important; }
+    .report-paper { border: none; box-shadow: none; }
+}

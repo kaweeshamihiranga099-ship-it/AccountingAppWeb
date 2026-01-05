@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>My Ledger</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+
+    <div id="splash-screen" class="screen active-screen">
+        <div class="splash-content">
+            <img src="logo.png" alt="App Logo" class="app-logo" onerror="this.style.display='none'">
+            <h1 class="app-title">My Ledger 📒</h1>
+            <div class="loader"><svg viewBox="0 0 50 50"><circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle></svg></div>
+        </div>
+    </div>
+
+    <div id="password-screen" class="screen" style="display: none;">
+        <div class="switch-container">
+            <label class="switch-label">UI Color Mood</label>
+            <label class="toggle-switch"><input type="checkbox" id="colorModeSwitch" checked onchange="toggleColorMode()"><span class="slider round"></span></label>
+        </div>
+        <div class="password-header"><h2 id="passTitle">Welcome Back</h2><p id="passSub">Enter your PIN to login</p></div>
+        <div class="dots-container" id="dotsContainer"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div class="keypad-grid">
+            <button onclick="pressKey('1')">1</button><button onclick="pressKey('2')">2</button><button onclick="pressKey('3')">3</button>
+            <button onclick="pressKey('4')">4</button><button onclick="pressKey('5')">5</button><button onclick="pressKey('6')">6</button>
+            <button onclick="pressKey('7')">7</button><button onclick="pressKey('8')">8</button><button onclick="pressKey('9')">9</button>
+            <div class="spacer"></div><button onclick="pressKey('0')">0</button><button onclick="pressKey('back')" style="background:transparent; font-size:24px;">⌫</button>
+        </div>
+        <button id="btnChangePin" class="text-btn" onclick="startChangePin()">Change PIN</button>
+    </div>
+
+    <div id="home-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
+        <div class="nav-bar">
+            <button class="nav-btn btn-settings" onclick="navigateTo('settings')">Settings</button>
+            <button class="nav-btn btn-accounts" onclick="navigateTo('accounts')">Accounts</button>
+            <button class="nav-btn btn-reports" onclick="navigateTo('reports')">Reports</button>
+        </div>
+        <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+        <div class="form-container">
+            <label class="form-label">හර (Debit) ගිණුම:</label><select id="spinDrType" class="form-select" onchange="updateAccountList('dr')"></select><select id="spinDrAcc" class="form-select"></select><div style="height: 15px;"></div>
+            <label class="form-label">බැර (Credit) ගිණුම:</label><select id="spinCrType" class="form-select" onchange="updateAccountList('cr')"></select><select id="spinCrAcc" class="form-select"></select><div style="height: 15px;"></div>
+            <input type="number" id="edAmt" class="form-input" placeholder="වටිනාකම (Rs.)"><input type="text" id="edDesc" class="form-input" placeholder="විස්තරය">
+            <button id="btnSave" class="save-btn" onclick="saveTransaction()">Save Transaction</button>
+            <p style="text-align: center; font-size: 10px; color: #555; margin-top: 5px;">(Long Press to open Quick Settings)</p>
+        </div>
+        <div style="height: 30px;"></div>
+        <div class="rules-box">
+            <h4>ගිණුම්කරණ රීති (Rules)</h4>
+            <table>
+                <tr><th>Type</th><th>Increase (+)</th><th>Decrease (-)</th></tr>
+                <tr><td>වත්කම්</td><td class="dr">හර (Dr)</td><td class="cr">බැර (Cr)</td></tr>
+                <tr><td>වියදම්</td><td class="dr">හර (Dr)</td><td class="cr">බැර (Cr)</td></tr>
+                <tr><td>වගකීම්</td><td class="cr">බැර (Cr)</td><td class="dr">හර (Dr)</td></tr>
+                <tr><td>හිමිකම්</td><td class="cr">බැර (Cr)</td><td class="dr">හර (Dr)</td></tr>
+                <tr><td>ආදායම්</td><td class="cr">බැර (Cr)</td><td class="dr">හර (Dr)</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <div id="settings-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
+        <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
+        <h2 style="text-align:center; margin: 10px 0;">Settings ⚙️</h2>
+        
+        <div class="settings-card"><h3>1. නව ගිණුම් සාදන්න</h3><select id="setSpinType" class="form-select"></select><input type="text" id="setAccName" class="form-input" placeholder="ගිණුමේ නම"><button class="action-btn btn-blue" onclick="createAccount()">Save Account</button></div>
+        
+        <div class="settings-card"><h3>2. ගිණුම් මකන්න</h3><select id="delSpinType" class="form-select" onchange="updateDelList()"></select><select id="delSpinAcc" class="form-select"></select><button class="action-btn btn-red" onclick="deleteAccount()">Delete Account</button></div>
+        
+        <div class="settings-card" style="background-color: #E0F7FA; border: 1px solid #006064;"><h3>3. Advanced Management</h3><p style="font-size: 12px; color: #006064; margin-bottom: 10px;">Manage Active Accounts & Edit Today's Entries</p><button class="action-btn" style="background-color: #0097A7;" onclick="navigateTo('new-settings')">📂 Open Advanced Settings</button></div>
+        
+        <div class="settings-card"><h3>4. Backup & Restore</h3><button class="action-btn btn-cyan" onclick="initFirebaseAndBackup()">☁ Backup to Cloud</button><div style="height:5px"></div><button class="action-btn btn-orange" onclick="restoreFromCloud()">☁ Restore from Cloud</button><div style="height:10px"></div><button class="action-btn btn-green" onclick="downloadBackup()">📥 Local Backup</button><div style="height:5px"></div><label for="fileInput" class="action-btn btn-indigo" style="display:block; text-align:center; cursor:pointer;">📤 Restore Local File</label><input type="file" id="fileInput" accept=".txt,.json" style="display:none" onchange="restoreBackup(this)"><p id="backupStatus" style="text-align:center; font-size:12px; margin-top:5px; color:#555;">Status: Ready</p></div>
+        
+        <div class="settings-card"><h3>5. Adjust Font Size</h3><p id="fontStatus" style="font-size:12px; text-align:center; margin-bottom:5px;">Current Scale: 1.0x</p><input type="range" id="fontSlider" min="5" max="15" value="10" style="width:100%;" oninput="updateFontPreview(this.value)"><button class="action-btn btn-purple" onclick="saveFontSettings()">Save Font Size</button></div>
+        
+        <div class="settings-card"><h3>6. Other Options</h3><button class="action-btn btn-purple" onclick="alert('Contact: +94715527239')">📞 Contact Developer</button></div>
+    </div>
+
+    <div id="new-settings-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
+        <button class="back-btn" onclick="navigateTo('settings')">⬅ Back to Settings</button>
+        <div style="background-color: #006064; padding: 15px; border-radius: 10px; margin: 10px 0; color: white;"><h2 style="margin:0;">Manage Accounts</h2><p style="margin:5px 0 0 0; font-size:12px; color:#B2EBF2;">Hide/Show Accounts & Edit Today's Entries</p></div>
+        <button class="action-btn" style="background-color: #0097A7; margin-bottom: 20px;" onclick="openHideAccountsDialog()">📂 Manage Active Accounts (Search)</button>
+        <h3 style="color: #546E7A; border-bottom: 2px solid #546E7A; padding-bottom: 5px;">Today's Transactions</h3>
+        <div id="todayTransList" style="margin-top: 10px;"></div>
+    </div>
+
+    <div id="account-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
+        <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
+        <h2 style="text-align:center; margin: 10px 0;">Account View 📊</h2>
+        <div class="filters-box">
+            <label>Type:</label><select id="accTypeSelect" class="form-select" onchange="updateAccountFilterList()"></select>
+            <label>Account:</label><select id="accSelect" class="form-select"></select>
+            <div style="display: flex; gap: 10px;"><div style="flex:1"><label>Year:</label><select id="yearSelect" class="form-select"></select></div><div style="flex:1"><label>Month:</label><select id="monthSelect" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div></div>
+            <button class="action-btn btn-indigo" onclick="showAccountDetails()">Show Ledger</button>
+        </div>
+        <h3 id="tAccTitle" style="text-align:center; margin-bottom: 5px;">- Select Account -</h3>
+        <div class="t-account-container"><div class="t-header"><div class="t-col dr-col">Dr (හර)</div><div class="t-col cr-col">Cr (බැර)</div></div><div class="t-body"><div class="t-col-content" id="drContent"></div><div class="t-divider"></div><div class="t-col-content" id="crContent"></div></div><div class="t-footer"><div class="t-total" id="drTotal">0.00</div><div class="t-total" id="crTotal">0.00</div></div></div>
+        <div id="finalBalanceBox" class="balance-box">Balance c/d: 0.00</div>
+    </div>
+
+    <div id="reports-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
+        <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
+        <h2 style="text-align:center; margin: 10px 0;">Financial Reports 📈</h2>
+        <div class="filters-box">
+            <div style="display: flex; gap: 10px;"><div style="flex:1"><label>Year:</label><select id="repYear" class="form-select"></select></div><div style="flex:1"><label>Month:</label><select id="repMonth" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div></div>
+            <button class="action-btn btn-green" onclick="generateReport()">Generate Summary</button><div style="height: 5px;"></div><button class="action-btn btn-red" onclick="printReport()">🖨️ Print / Save as PDF</button><div style="height: 5px;"></div><button class="action-btn btn-indigo" onclick="navigateTo('charts')">📊 View Charts Analysis</button>
+        </div>
+        <div id="report-output" class="report-paper"><p style="text-align:center; color:#888; margin-top:20px;">Select Year/Month and click "Generate Summary"</p></div>
+    </div>
+
+    <div id="charts-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh; background: #eceff1;">
+        <button class="back-btn" onclick="navigateTo('reports')" style="background: white; border: none; margin-bottom: 15px;">⬅ Back to Reports</button>
+        <div style="text-align:center; padding:15px; background:white; border-radius:10px; margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);"><h2 style="color:#444; margin:0;">FINANCIAL CHARTS</h2><p id="chartTitle" style="color:#888; margin:5px 0 0 0;">Loading...</p></div>
+        <div id="chartsContainer"></div>
+    </div>
+
+    <div id="loginModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+        <div style="background:white; padding:20px; border-radius:10px; width:85%; max-width:300px;">
+            <h3 style="margin-top:0;">Account Access</h3>
+            <input type="email" id="loginEmail" placeholder="Email" class="form-input"><input type="password" id="loginPass" placeholder="Password" class="form-input">
+            <button class="action-btn btn-blue" onclick="firebaseLogin()">Login</button><div style="height:10px"></div><button class="action-btn btn-green" onclick="firebaseRegister()">Register</button><div style="height:10px"></div><button class="action-btn btn-red" onclick="document.getElementById('loginModal').style.display='none'">Cancel</button>
+        </div>
+    </div>
+
+    <div id="hideAccModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+        <div style="background:white; padding:20px; border-radius:10px; width:90%; height:80%; display:flex; flex-direction:column;">
+            <h3 style="margin-top:0;">Hide Accounts</h3>
+            <input type="text" id="accSearch" placeholder="🔍 Search Account..." class="form-input" onkeyup="filterHideList()">
+            <div id="hideAccList" style="flex:1; overflow-y:auto; border:1px solid #eee; margin:10px 0; padding:5px;"></div>
+            <button class="action-btn btn-blue" onclick="saveHiddenAccounts()">Save & Close</button><div style="height:5px"></div><button class="action-btn btn-red" onclick="document.getElementById('hideAccModal').style.display='none'">Cancel</button>
+        </div>
+    </div>
+
+    <div id="restoreModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+        <div style="background:white; padding:20px; border-radius:10px; width:90%; height:70%; display:flex; flex-direction:column;">
+            <h3 style="margin-top:0;">Select Cloud Backup</h3>
+            <div id="restoreList" style="flex:1; overflow-y:auto; border:1px solid #eee; margin:10px 0; padding:5px;">
+                <p style="text-align:center; color:#888;">Loading backups...</p>
+            </div>
+            <button class="action-btn btn-red" onclick="document.getElementById('restoreModal').style.display='none'">Cancel</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
