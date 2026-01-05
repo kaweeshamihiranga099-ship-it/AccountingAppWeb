@@ -1,3 +1,4 @@
+
 // =========================================
 // 1. GLOBAL CONFIG & FIREBASE
 // =========================================
@@ -22,19 +23,61 @@ try {
 } catch (e) { console.error("Firebase Init Error:", e); }
 
 // =========================================
-// 2. INITIALIZATION
+// 2. INITIALIZATION & AUTO DATA FIX
 // =========================================
 window.addEventListener("load", function() {
+    // 1. Splash & Font
     let savedScale = localStorage.getItem("app_scale");
     if(savedScale) try { updateFontPreview(savedScale); } catch(e){}
-    
-    // Splash Screen Logic
     setTimeout(function() {
         const splash = document.getElementById("splash-screen");
         if(splash) { splash.style.display = "none"; splash.classList.remove("active-screen"); }
         navigateToPassword();
     }, 2000);
+
+    // 2. AUTO FIX DATA (Trims spaces from Android Backup)
+    fixDataIntegrity();
 });
+
+function fixDataIntegrity() {
+    try {
+        let trStr = localStorage.getItem("transactions");
+        let accStr = localStorage.getItem("accounts");
+
+        if (trStr && accStr) {
+            let tr = JSON.parse(trStr) || [];
+            let acc = JSON.parse(accStr) || {};
+            let changed = false;
+
+            // Fix Accounts (Trim Names)
+            for (let type in acc) {
+                acc[type] = acc[type].map(name => {
+                    let clean = name.trim();
+                    if(clean !== name) changed = true;
+                    return clean;
+                });
+            }
+
+            // Fix Transactions (Trim Account Refs)
+            tr = tr.map(t => {
+                let d = t.dr_acc.trim();
+                let c = t.cr_acc.trim();
+                if(d !== t.dr_acc || c !== t.cr_acc) {
+                    t.dr_acc = d;
+                    t.cr_acc = c;
+                    changed = true;
+                }
+                return t;
+            });
+
+            if(changed) {
+                localStorage.setItem("transactions", JSON.stringify(tr));
+                localStorage.setItem("accounts", JSON.stringify(acc));
+                console.log("Data Auto-Fixed: Spaces Removed ✅");
+            }
+        }
+    } catch(e) { console.error("Auto Fix Error:", e); }
+}
 
 function navigateTo(name) {
     document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
@@ -106,17 +149,8 @@ function updateAccountList(s) {
     let t = document.getElementById(s=='dr'?"spinDrType":"spinCrType").value;
     let a = document.getElementById(s=='dr'?"spinDrAcc":"spinCrAcc"); a.innerHTML="";
     
-    // SAFE PARSING logic for accounts
-    let all = {};
-    try { 
-        let raw = localStorage.getItem("accounts");
-        // Handle double stringification from Android
-        if (raw && raw.startsWith('"')) raw = JSON.parse(raw);
-        all = JSON.parse(raw) || {}; 
-    } catch(e) { all = {}; }
-    
-    let h = [];
-    try { h = JSON.parse(localStorage.getItem("hidden_accounts")) || []; } catch(e) {}
+    let all = {}; try { all = JSON.parse(localStorage.getItem("accounts")) || {}; } catch(e) { all = {}; }
+    let h = []; try { h = JSON.parse(localStorage.getItem("hidden_accounts")) || []; } catch(e) {}
 
     if(all[t]) {
         all[t].forEach(n => { if(!h.includes(n)) a.innerHTML+=`<option>${n}</option>`; });
@@ -132,8 +166,7 @@ function saveTransaction() {
     let now=new Date(); 
     let tr={year:now.getFullYear().toString(), month:(now.getMonth()+1).toString(), date:now.toISOString().split('T')[0], dr_type:dt, dr_acc:da, cr_type:ct, cr_acc:ca, amount:am, desc:de};
     
-    let arr = [];
-    try { arr = JSON.parse(localStorage.getItem("transactions")) || []; } catch(e) {}
+    let arr = []; try { arr = JSON.parse(localStorage.getItem("transactions")) || []; } catch(e) {}
     arr.push(tr); 
     localStorage.setItem("transactions", JSON.stringify(arr));
     
@@ -149,7 +182,7 @@ function setupLongPress() {
 }
 
 // =========================================
-// 5. SETTINGS & ACCOUNTS
+// 5. SETTINGS
 // =========================================
 function initSettingsScreen() {
     let c=document.getElementById("setSpinType"), d=document.getElementById("delSpinType"); c.innerHTML=""; d.innerHTML="";
@@ -185,7 +218,271 @@ function deleteAccount() {
     showAlert("Success","Deleted!"); updateDelList();
 }
 
-// Advanced Settings
+// =========================================
+// 6. BACKUP & RESTORE (SMART)
+// =========================================
+function downloadBackup() {
+    let d={
+        accounts: localStorage.getItem("accounts"), 
+        transactions: localStorage.getItem("transactions"), 
+        hidden_accounts: localStorage.getItem("hidden_accounts")
+    };
+    let b=new Blob([JSON.stringify(d)],{type:"application/json"});
+    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    document.getElementById("backupStatus").innerText="Downloaded ✅";
+}
+
+function restoreBackup(i) {
+    let f=i.files[0]; if(!f) return; let r=new FileReader();
+    r.onload=e=>{ try{ processRestoreData(JSON.parse(e.target.result)); }catch(x){showAlert("Error","Invalid File!");} };
+    r.readAsText(f);
+}
+
+function initFirebaseAndBackup() { let u=firebase.auth().currentUser; if(u) performCloudBackup(u.uid); else document.getElementById("loginModal").style.display="flex"; }
+function firebaseLogin() { auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Logged In!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
+function firebaseRegister() { auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Registered!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
+
+function performCloudBackup(uid) {
+    let fullData = {
+        transactions: localStorage.getItem("transactions") || "[]",
+        accounts: localStorage.getItem("accounts") || "{}",
+        hidden_accounts: localStorage.getItem("hidden_accounts") || "[]"
+    };
+    let jsonString = JSON.stringify(fullData);
+    let dateStr = new Date().toLocaleString();
+    let ts = Date.now();
+    const ref = db.ref('users/' + uid + '/backups');
+    
+    ref.once('value').then(snapshot => {
+        let count = snapshot.numChildren();
+        if (count >= 10) { let keys = Object.keys(snapshot.val() || {}); if(keys.length > 0) ref.child(keys[0]).remove(); }
+        ref.push().set({ data: jsonString, timestamp: ts, date_label: dateStr })
+           .then(() => showAlert("Success","Backup Success!"))
+           .catch(e => showAlert("Error",e.message));
+    });
+}
+
+function restoreFromCloud() {
+    let u = firebase.auth().currentUser;
+    if (!u) { showAlert("Error","Please Login first!"); return; }
+    document.getElementById("restoreModal").style.display = "flex";
+    const listDiv = document.getElementById("restoreList");
+    listDiv.innerHTML = "Loading...";
+
+    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value').then(snapshot => {
+        listDiv.innerHTML = "";
+        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups.</p>"; return; }
+        
+        let backups = [];
+        snapshot.forEach(child => { backups.unshift(child.val()); });
+        
+        backups.forEach(val => {
+            let btn = document.createElement("button");
+            btn.className = "action-btn btn-indigo";
+            btn.style.marginBottom = "10px";
+            btn.innerText = "📅 " + (val.date_label || "Unknown Date");
+            btn.onclick = () => confirmRestore(val.data);
+            listDiv.appendChild(btn);
+        });
+    });
+}
+
+function confirmRestore(jsonString) {
+    showAlert("Confirm", "Restore this data?", true, function() {
+        try {
+            let d = JSON.parse(jsonString);
+            processRestoreData(d);
+        } catch (e) { showAlert("Error", "Restore Failed!"); }
+    });
+}
+
+// SMART RESTORE: Cleans Data on Restore
+function processRestoreData(d) {
+    try {
+        const fixData = (data) => {
+            if (typeof data === 'string') {
+                if (data.startsWith("[") || data.startsWith("{")) return data;
+                return data; 
+            }
+            return JSON.stringify(data);
+        };
+
+        if (d.transactions) localStorage.setItem("transactions", fixData(d.transactions));
+        if (d.accounts) localStorage.setItem("accounts", fixData(d.accounts));
+        if (d.hidden_accounts) localStorage.setItem("hidden_accounts", fixData(d.hidden_accounts));
+
+        // Immediately run fix to trim spaces
+        fixDataIntegrity();
+
+        showAlert("Success", "Restored! Reloading...");
+        setTimeout(() => location.reload(), 1500);
+    } catch(e) {
+        showAlert("Error", "Data Error: " + e.message);
+    }
+}
+
+function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
+function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
+
+// =========================================
+// 7. ACCOUNT VIEW & REPORTS (FIXED)
+// =========================================
+function initAccountScreen() {
+    let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
+    accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
+    for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
+    document.getElementById("monthSelect").value=new Date().getMonth()+1; updateAccountFilterList();
+}
+function updateAccountFilterList() {
+    let t=document.getElementById("accTypeSelect").value, s=document.getElementById("accSelect"); s.innerHTML="";
+    let all={}; try{all=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
+    let h=[]; try{h=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
+    if(all[t]) all[t].forEach(n=>{ if(!h.includes(n)) s.innerHTML+=`<option>${n}</option>`; });
+}
+function showAccountDetails() {
+    let ac=document.getElementById("accSelect").value;
+    let yr=document.getElementById("yearSelect").value;
+    let mo=document.getElementById("monthSelect").value;
+    if(!ac) return; 
+    
+    document.getElementById("tAccTitle").innerText=ac+" ("+yr+"/"+mo+")";
+    let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
+    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
+    
+    let td=0, tc=0, ob=0;
+    
+    // Calculate B/F
+    tr.forEach(x=>{ 
+        if(parseInt(x.year)<parseInt(yr)||(parseInt(x.year)==parseInt(yr)&&parseInt(x.month)<parseInt(mo))) { 
+            let a=parseFloat(x.amount); 
+            // Loose comparison (Trimmed) handles data issues
+            if(x.dr_acc.trim() == ac.trim()) ob+=a; 
+            if(x.cr_acc.trim() == ac.trim()) ob-=a; 
+        } 
+    });
+
+    if(ob!=0) { 
+        let d=document.createElement("div"); d.className="t-item t-bf"; 
+        d.innerText="B/F : "+Math.abs(ob).toFixed(2); 
+        if(ob>0){dr.appendChild(d); td+=ob;} else{cr.appendChild(d); tc+=Math.abs(ob);} 
+    }
+
+    // List Transactions
+    tr.forEach(x=>{ 
+        if(x.year==yr && x.month==mo) { 
+            let a=parseFloat(x.amount);
+            let d=document.createElement("div"); d.className="t-item"; 
+            d.onclick=()=>showAlert("Details",x.desc); 
+            
+            if(x.dr_acc.trim() == ac.trim()){
+                d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a;
+            } else if(x.cr_acc.trim() == ac.trim()){
+                d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a;
+            } 
+        } 
+    });
+
+    document.getElementById("drTotal").innerText=td.toFixed(2); 
+    document.getElementById("crTotal").innerText=tc.toFixed(2);
+    let b=td-tc, bb=document.getElementById("finalBalanceBox"); 
+    bb.innerText="Balance c/d: "+b.toFixed(2); 
+    bb.style.backgroundColor=b>=0?"#4CAF50":"#F44336";
+}
+
+function initReportsScreen() {
+    let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
+    document.getElementById("repMonth").value=new Date().getMonth()+1;
+}
+
+function generateReport() {
+    let sY = parseInt(document.getElementById("repYear").value);
+    let sM = parseInt(document.getElementById("repMonth").value);
+    let output = document.getElementById("report-output");
+    
+    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
+    let accounts={}; try{accounts=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
+    let hidden=[]; try{hidden=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
+    
+    let html = `<div style="text-align:center; margin-bottom:20px;"><h2>MY LEDGER - FULL REPORT</h2><p>Year: ${sY} | Month: ${sM}</p></div><hr>`;
+
+    // 1. TRIAL BALANCE
+    html += `<div class="report-section"><h3 class="text-center">1. TRIAL BALANCE</h3><table class="tb-table"><thead><tr><th>Account Name</th><th>Dr</th><th>Cr</th></tr></thead><tbody>`;
+    let totTbDr = 0, totTbCr = 0, allAccNames = [];
+    Object.keys(accounts).forEach(type => { accounts[type].forEach(acc => { if(!hidden.includes(acc)) allAccNames.push(acc); }); });
+    allAccNames.sort();
+
+    allAccNames.forEach(acc => {
+        let bal = 0;
+        tr.forEach(t => {
+            let tY = parseInt(t.year), tM = parseInt(t.month);
+            if (tY < sY || (tY == sY && tM <= sM)) {
+                let a = parseFloat(t.amount);
+                if (t.dr_acc.trim() == acc.trim()) bal += a; 
+                if (t.cr_acc.trim() == acc.trim()) bal -= a;
+            }
+        });
+        if (bal !== 0) {
+            if (bal > 0) totTbDr += bal; else totTbCr += Math.abs(bal);
+            html += `<tr><td>${acc}</td><td class="text-right">${bal > 0 ? bal.toFixed(2) : ""}</td><td class="text-right">${bal < 0 ? Math.abs(bal).toFixed(2) : ""}</td></tr>`;
+        }
+    });
+    html += `<tr class="bold" style="background:#f0f0f0;"><td>TOTALS</td><td class="text-right">${totTbDr.toFixed(2)}</td><td class="text-right">${totTbCr.toFixed(2)}</td></tr></tbody></table></div>`;
+
+    // 2. LEDGERS
+    html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">2. GENERAL LEDGER</h3>`;
+    allAccNames.forEach(acc => {
+        let openBal = 0;
+        tr.forEach(t => {
+            let tY = parseInt(t.year), tM = parseInt(t.month);
+            if (tY < sY || (tY == sY && tM < sM)) { 
+                let a = parseFloat(t.amount); 
+                if (t.dr_acc.trim() == acc.trim()) openBal += a; 
+                if (t.cr_acc.trim() == acc.trim()) openBal -= a; 
+            }
+        });
+        let drHtml = "", crHtml = "", monthDr = 0, monthCr = 0;
+        if (openBal !== 0) {
+            let bfRow = `<div class="t-item t-bf">B/F: ${Math.abs(openBal).toFixed(2)}</div>`;
+            if (openBal > 0) { drHtml += bfRow; monthDr += openBal; } else { crHtml += bfRow; monthCr += Math.abs(openBal); }
+        }
+        let hasTrans = false;
+        tr.forEach(t => {
+            if (parseInt(t.year) == sY && parseInt(t.month) == sM) {
+                let a = parseFloat(t.amount);
+                if (t.dr_acc.trim() == acc.trim()) { drHtml += `<div class="t-item">${t.date} | ${t.cr_acc} : ${a}</div>`; monthDr += a; hasTrans = true; }
+                else if (t.cr_acc.trim() == acc.trim()) { crHtml += `<div class="t-item">${t.date} | ${t.dr_acc} : ${a}</div>`; monthCr += a; hasTrans = true; }
+            }
+        });
+        if (openBal !== 0 || hasTrans) {
+            let finalBal = monthDr - monthCr;
+            html += `<div class="t-account-container"><div class="text-center" style="background:#ddd; padding:5px; font-weight:bold; border-bottom:1px solid #000;">${acc}</div><div class="t-body"><div class="t-col-content" style="border-right:1px solid #000;">${drHtml}</div><div class="t-col-content">${crHtml}</div></div><div class="t-footer"><div class="t-total text-center" style="border-right:1px solid #000;">${monthDr.toFixed(2)}</div><div class="t-total text-center">${monthCr.toFixed(2)}</div></div><div class="text-center" style="padding:5px; font-weight:bold; border-top:1px solid #000;">Balance c/d: ${finalBal.toFixed(2)}</div></div>`;
+        }
+    });
+
+    // 3. FINAL ACCOUNTS
+    html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">3. FINANCIAL STATEMENTS</h3>`;
+    let ta=0, tl=0, te=0, ti=0, tx=0;
+    tr.forEach(t => {
+        let tY=parseInt(t.year), tM=parseInt(t.month);
+        if (tY < sY || (tY == sY && tM <= sM)) {
+            let a = parseFloat(t.amount);
+            if(t.dr_type=="වත්කම්") ta+=a; if(t.dr_type=="වියදම්") tx+=a; if(t.dr_type=="වගකීම්") tl-=a; if(t.dr_type=="හිමිකම්") te-=a; if(t.dr_type=="ආදායම්") ti-=a;
+            if(t.cr_type=="වත්කම්") ta-=a; if(t.cr_type=="වියදම්") tx-=a; if(t.cr_type=="වගකීම්") tl+=a; if(t.cr_type=="හිමිකම්") te+=a; if(t.cr_type=="ආදායම්") ti+=a;
+        }
+    });
+    let netAssets = ta - tl, netProfit = ti - tx, trueEquity = te + netProfit;
+    html += `<div style="border:1px solid #000; padding:15px; font-family:monospace;"><p><strong>INCOME STATEMENT</strong></p><p>Total Income: <span style="float:right">${ti.toFixed(2)}</span></p><p>Total Expenses: <span style="float:right">(${tx.toFixed(2)})</span></p><hr><p><strong>NET PROFIT: <span style="float:right">${netProfit.toFixed(2)}</span></strong></p><br><p><strong>FINANCIAL POSITION</strong></p><p>Total Assets: <span style="float:right">${ta.toFixed(2)}</span></p><p>(-) Liabilities: <span style="float:right">(${tl.toFixed(2)})</span></p><hr><p><strong>NET ASSETS: <span style="float:right">${netAssets.toFixed(2)}</span></strong></p><br><p><strong>EQUITY CHECK</strong></p><p>Capital B/F: <span style="float:right">${te.toFixed(2)}</span></p><p>(+) Net Profit: <span style="float:right">${netProfit.toFixed(2)}</span></p><hr><p><strong>TOTAL EQUITY: <span style="float:right">${trueEquity.toFixed(2)}</span></strong></p></div>`;
+
+    output.innerHTML = html;
+}
+
+function printReport() { 
+    let c = document.getElementById("report-output").innerText; 
+    if(!c || c.includes("Select")) { showAlert("Error", "Generate Report First!"); } 
+    else { alert("ඔබට pdf එකක් අවශ්‍යනම් හෝ Android app එක බාගත කර ගැනීමට අවශ්‍ය නම් +94 715527239 යන Whatsapp අංකයට දැනුම් දෙන්න. ස්තූතියි 😊"); }
+}
+
+// New Settings
 function initNewSettingsScreen() { renderTodayTransactions(); }
 function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
 function filterHideList() {
@@ -228,116 +525,17 @@ function deleteTransaction(idx) {
     });
 }
 
-// =========================================
-// 6. BACKUP & RESTORE (SMART LOGIC)
-// =========================================
-function downloadBackup() {
-    let d={
-        accounts: localStorage.getItem("accounts"), 
-        transactions: localStorage.getItem("transactions"), 
-        hidden_accounts: localStorage.getItem("hidden_accounts")
-    };
-    let b=new Blob([JSON.stringify(d)],{type:"application/json"});
-    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    document.getElementById("backupStatus").innerText="Downloaded ✅";
-}
-
-function restoreBackup(i) {
-    let f=i.files[0]; if(!f) return; let r=new FileReader();
-    r.onload=e=>{ try{ processRestoreData(JSON.parse(e.target.result)); }catch(x){showAlert("Error","Invalid File!");} };
-    r.readAsText(f);
-}
-
-function initFirebaseAndBackup() { let u=firebase.auth().currentUser; if(u) performCloudBackup(u.uid); else document.getElementById("loginModal").style.display="flex"; }
-function firebaseLogin() { auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Logged In!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
-function firebaseRegister() { auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Registered!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
-
-function performCloudBackup(uid) {
-    // Save exactly what is in localStorage (String) to match Android format
-    let fullData = {
-        transactions: localStorage.getItem("transactions") || "[]",
-        accounts: localStorage.getItem("accounts") || "{}",
-        hidden_accounts: localStorage.getItem("hidden_accounts") || "[]"
-    };
-    let jsonString = JSON.stringify(fullData);
-    let dateStr = new Date().toLocaleString();
-    let ts = Date.now();
-    const ref = db.ref('users/' + uid + '/backups');
+function initChartsScreen() {
+    let c=document.getElementById("chartsContainer"); c.innerHTML="Loading...";
+    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
+    let ti=0, te=0;
+    tr.forEach(t=>{ let a=parseFloat(t.amount); if(t.cr_type=="ආදායම්")ti+=a; if(t.dr_type=="වියදම්")te+=a; });
     
-    ref.once('value').then(snapshot => {
-        let count = snapshot.numChildren();
-        if (count >= 10) { let keys = Object.keys(snapshot.val() || {}); if(keys.length > 0) ref.child(keys[0]).remove(); }
-        ref.push().set({ data: jsonString, timestamp: ts, date_label: dateStr })
-           .then(() => showAlert("Success","Backup Success!"))
-           .catch(e => showAlert("Error",e.message));
-    });
+    c.innerHTML=`<div class="settings-card"><h3>Income vs Expense</h3><canvas id="c1"></canvas></div>`;
+    setTimeout(()=>{ new Chart(document.getElementById('c1'), {type:'pie',data:{labels:['Inc','Exp'],datasets:[{data:[ti,te],backgroundColor:['#4CAF50','#F44336']}]}}); }, 500);
 }
 
-function restoreFromCloud() {
-    let u = firebase.auth().currentUser;
-    if (!u) { showAlert("Error","Please Login first!"); return; }
-    document.getElementById("restoreModal").style.display = "flex";
-    const listDiv = document.getElementById("restoreList");
-    listDiv.innerHTML = "Loading...";
-
-    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value').then(snapshot => {
-        listDiv.innerHTML = "";
-        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups.</p>"; return; }
-        
-        let backups = [];
-        snapshot.forEach(child => { backups.unshift(child.val()); }); // Newest first
-        
-        backups.forEach(val => {
-            let btn = document.createElement("button");
-            btn.className = "action-btn btn-indigo";
-            btn.style.marginBottom = "10px";
-            btn.innerText = "📅 " + (val.date_label || "Unknown Date");
-            btn.onclick = () => confirmRestore(val.data);
-            listDiv.appendChild(btn);
-        });
-    });
-}
-
-function confirmRestore(jsonString) {
-    showAlert("Confirm", "Restore this data?", true, function() {
-        try {
-            let d = JSON.parse(jsonString);
-            processRestoreData(d);
-        } catch (e) { showAlert("Error", "Restore Failed!"); }
-    });
-}
-
-// *** SMART RESTORE FUNCTION (Fixes Android vs Web format issues) ***
-function processRestoreData(d) {
-    try {
-        // Helper to fix double-stringification (e.g. "[...]" -> Array)
-        const fixData = (data) => {
-            if (typeof data === 'string') {
-                // If it looks like JSON array/object, keep it as string for localStorage
-                if (data.startsWith("[") || data.startsWith("{")) return data;
-                return data; 
-            }
-            // If it's already an object (Web backup), stringify it
-            return JSON.stringify(data);
-        };
-
-        if (d.transactions) localStorage.setItem("transactions", fixData(d.transactions));
-        if (d.accounts) localStorage.setItem("accounts", fixData(d.accounts));
-        if (d.hidden_accounts) localStorage.setItem("hidden_accounts", fixData(d.hidden_accounts));
-
-        showAlert("Success", "Restored! Reloading...");
-        setTimeout(() => location.reload(), 1500);
-    } catch(e) {
-        showAlert("Error", "Data Error: " + e.message);
-    }
-}
-
-function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
-function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
-
-// =========================================
-// 7. ALERT SYSTEM
-// =========================================
+// ALERT SYSTEM
 function showAlert(title, message, isConfirm = false, onYes = null) {
     const modal = document.getElementById("customAlert");
     if(!modal) { alert(message); return; }
@@ -356,131 +554,3 @@ function showAlert(title, message, isConfirm = false, onYes = null) {
     modal.style.display = "flex";
 }
 function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
-
-// =========================================
-// 8. ACCOUNTS & FULL REPORT
-// =========================================
-function initAccountScreen() {
-    let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
-    accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
-    for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
-    document.getElementById("monthSelect").value=new Date().getMonth()+1; updateAccountFilterList();
-}
-function updateAccountFilterList() {
-    let t=document.getElementById("accTypeSelect").value, s=document.getElementById("accSelect"); s.innerHTML="";
-    let all={}; try{all=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
-    let h=[]; try{h=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
-    if(all[t]) all[t].forEach(n=>{ if(!h.includes(n)) s.innerHTML+=`<option>${n}</option>`; });
-}
-function showAccountDetails() {
-    let ac=document.getElementById("accSelect").value, yr=document.getElementById("yearSelect").value, mo=document.getElementById("monthSelect").value;
-    if(!ac) return; document.getElementById("tAccTitle").innerText=ac+" ("+yr+"/"+mo+")";
-    let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
-    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
-    
-    let td=0, tc=0, ob=0;
-    tr.forEach(x=>{ if(parseInt(x.year)<parseInt(yr)||(parseInt(x.year)==parseInt(yr)&&parseInt(x.month)<parseInt(mo))) { let a=parseFloat(x.amount); if(x.dr_acc==ac) ob+=a; if(x.cr_acc==ac) ob-=a; } });
-    if(ob!=0) { let d=document.createElement("div"); d.className="t-item t-bf"; d.innerText="B/F : "+Math.abs(ob).toFixed(2); if(ob>0){dr.appendChild(d); td+=ob;}else{cr.appendChild(d); tc+=Math.abs(ob);} }
-    tr.forEach(x=>{ if(x.year==yr && x.month==mo) { let a=parseFloat(x.amount), d=document.createElement("div"); d.className="t-item"; d.onclick=()=>showAlert("Details",x.desc); if(x.dr_acc==ac){d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a;}else if(x.cr_acc==ac){d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a;} } });
-    document.getElementById("drTotal").innerText=td.toFixed(2); document.getElementById("crTotal").innerText=tc.toFixed(2);
-    let b=td-tc, bb=document.getElementById("finalBalanceBox"); bb.innerText="Balance c/d: "+b.toFixed(2); bb.style.backgroundColor=b>=0?"#4CAF50":"#F44336";
-}
-function initReportsScreen() {
-    let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
-    document.getElementById("repMonth").value=new Date().getMonth()+1;
-}
-
-// FULL REPORT GENERATOR (PDF OPTIMIZED)
-function generateReport() {
-    let sY = parseInt(document.getElementById("repYear").value);
-    let sM = parseInt(document.getElementById("repMonth").value);
-    let output = document.getElementById("report-output");
-    
-    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
-    let accounts={}; try{accounts=JSON.parse(localStorage.getItem("accounts"))||{};}catch(e){}
-    let hidden=[]; try{hidden=JSON.parse(localStorage.getItem("hidden_accounts"))||[];}catch(e){}
-    
-    let html = `<div style="text-align:center; margin-bottom:20px;"><h2>MY LEDGER - FULL REPORT</h2><p>Year: ${sY} | Month: ${sM}</p></div><hr>`;
-
-    // 1. TRIAL BALANCE
-    html += `<div class="report-section"><h3 class="text-center">1. TRIAL BALANCE</h3><table class="tb-table"><thead><tr><th>Account Name</th><th>Dr</th><th>Cr</th></tr></thead><tbody>`;
-    let totTbDr = 0, totTbCr = 0, allAccNames = [];
-    Object.keys(accounts).forEach(type => { accounts[type].forEach(acc => { if(!hidden.includes(acc)) allAccNames.push(acc); }); });
-    allAccNames.sort();
-
-    allAccNames.forEach(acc => {
-        let bal = 0;
-        tr.forEach(t => {
-            let tY = parseInt(t.year), tM = parseInt(t.month);
-            if (tY < sY || (tY == sY && tM <= sM)) {
-                let a = parseFloat(t.amount);
-                if (t.dr_acc === acc) bal += a; if (t.cr_acc === acc) bal -= a;
-            }
-        });
-        if (bal !== 0) {
-            if (bal > 0) totTbDr += bal; else totTbCr += Math.abs(bal);
-            html += `<tr><td>${acc}</td><td class="text-right">${bal > 0 ? bal.toFixed(2) : ""}</td><td class="text-right">${bal < 0 ? Math.abs(bal).toFixed(2) : ""}</td></tr>`;
-        }
-    });
-    html += `<tr class="bold" style="background:#f0f0f0;"><td>TOTALS</td><td class="text-right">${totTbDr.toFixed(2)}</td><td class="text-right">${totTbCr.toFixed(2)}</td></tr></tbody></table></div>`;
-
-    // 2. LEDGERS
-    html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">2. GENERAL LEDGER</h3>`;
-    allAccNames.forEach(acc => {
-        let openBal = 0;
-        tr.forEach(t => {
-            let tY = parseInt(t.year), tM = parseInt(t.month);
-            if (tY < sY || (tY == sY && tM < sM)) { let a = parseFloat(t.amount); if (t.dr_acc === acc) openBal += a; if (t.cr_acc === acc) openBal -= a; }
-        });
-        let drHtml = "", crHtml = "", monthDr = 0, monthCr = 0;
-        if (openBal !== 0) {
-            let bfRow = `<div class="t-item t-bf">B/F: ${Math.abs(openBal).toFixed(2)}</div>`;
-            if (openBal > 0) { drHtml += bfRow; monthDr += openBal; } else { crHtml += bfRow; monthCr += Math.abs(openBal); }
-        }
-        let hasTrans = false;
-        tr.forEach(t => {
-            if (parseInt(t.year) == sY && parseInt(t.month) == sM) {
-                let a = parseFloat(t.amount);
-                if (t.dr_acc === acc) { drHtml += `<div class="t-item">${t.date} | ${t.cr_acc} : ${a}</div>`; monthDr += a; hasTrans = true; }
-                else if (t.cr_acc === acc) { crHtml += `<div class="t-item">${t.date} | ${t.dr_acc} : ${a}</div>`; monthCr += a; hasTrans = true; }
-            }
-        });
-        if (openBal !== 0 || hasTrans) {
-            let finalBal = monthDr - monthCr;
-            html += `<div class="t-account-container"><div class="text-center" style="background:#ddd; padding:5px; font-weight:bold; border-bottom:1px solid #000;">${acc}</div><div class="t-body"><div class="t-col-content" style="border-right:1px solid #000;">${drHtml}</div><div class="t-col-content">${crHtml}</div></div><div class="t-footer"><div class="t-total text-center" style="border-right:1px solid #000;">${monthDr.toFixed(2)}</div><div class="t-total text-center">${monthCr.toFixed(2)}</div></div><div class="text-center" style="padding:5px; font-weight:bold; border-top:1px solid #000;">Balance c/d: ${finalBal.toFixed(2)}</div></div>`;
-        }
-    });
-
-    // 3. FINAL ACCOUNTS
-    html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">3. FINANCIAL STATEMENTS</h3>`;
-    let ta=0, tl=0, te=0, ti=0, tx=0;
-    tr.forEach(t => {
-        let tY=parseInt(t.year), tM=parseInt(t.month);
-        if (tY < sY || (tY == sY && tM <= sM)) {
-            let a = parseFloat(t.amount);
-            if(t.dr_type=="වත්කම්") ta+=a; if(t.dr_type=="වියදම්") tx+=a; if(t.dr_type=="වගකීම්") tl-=a; if(t.dr_type=="හිමිකම්") te-=a; if(t.dr_type=="ආදායම්") ti-=a;
-            if(t.cr_type=="වත්කම්") ta-=a; if(t.cr_type=="වියදම්") tx-=a; if(t.cr_type=="වගකීම්") tl+=a; if(t.cr_type=="හිමිකම්") te+=a; if(t.cr_type=="ආදායම්") ti+=a;
-        }
-    });
-    let netAssets = ta - tl, netProfit = ti - tx, trueEquity = te + netProfit;
-    html += `<div style="border:1px solid #000; padding:15px; font-family:monospace;"><p><strong>INCOME STATEMENT</strong></p><p>Total Income: <span style="float:right">${ti.toFixed(2)}</span></p><p>Total Expenses: <span style="float:right">(${tx.toFixed(2)})</span></p><hr><p><strong>NET PROFIT: <span style="float:right">${netProfit.toFixed(2)}</span></strong></p><br><p><strong>FINANCIAL POSITION</strong></p><p>Total Assets: <span style="float:right">${ta.toFixed(2)}</span></p><p>(-) Liabilities: <span style="float:right">(${tl.toFixed(2)})</span></p><hr><p><strong>NET ASSETS: <span style="float:right">${netAssets.toFixed(2)}</span></strong></p><br><p><strong>EQUITY CHECK</strong></p><p>Capital B/F: <span style="float:right">${te.toFixed(2)}</span></p><p>(+) Net Profit: <span style="float:right">${netProfit.toFixed(2)}</span></p><hr><p><strong>TOTAL EQUITY: <span style="float:right">${trueEquity.toFixed(2)}</span></strong></p></div>`;
-
-    output.innerHTML = html;
-}
-
-function printReport() { 
-    let c = document.getElementById("report-output").innerText; 
-    if(!c || c.includes("Select")) { showAlert("Error", "Generate Report First!"); } 
-    else { alert("ඔබට pdf එකක් අවශ්‍යනම් හෝ Android app එක බාගත කර ගැනීමට අවශ්‍ය නම් +94 715527239 යන Whatsapp අංකයට දැනුම් දෙන්න. ස්තූතියි 😊"); }
-}
-
-function initChartsScreen() {
-    let c=document.getElementById("chartsContainer"); c.innerHTML="Loading...";
-    let tr=[]; try{tr=JSON.parse(localStorage.getItem("transactions"))||[];}catch(e){}
-    let ti=0, te=0;
-    tr.forEach(t=>{ let a=parseFloat(t.amount); if(t.cr_type=="ආදායම්")ti+=a; if(t.dr_type=="වියදම්")te+=a; });
-    
-    c.innerHTML=`<div class="settings-card"><h3>Income vs Expense</h3><canvas id="c1"></canvas></div>`;
-    setTimeout(()=>{ new Chart(document.getElementById('c1'), {type:'pie',data:{labels:['Inc','Exp'],datasets:[{data:[ti,te],backgroundColor:['#4CAF50','#F44336']}]}}); }, 500);
-}
-
