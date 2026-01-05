@@ -1,3 +1,4 @@
+
 // =========================================
 // 1. GLOBAL CONFIG
 // =========================================
@@ -189,7 +190,7 @@ function deleteTransaction(idx) {
 }
 
 // =========================================
-// 6. BACKUP & RESTORE (FIXED FOR ANDROID COMPATIBILITY)
+// 6. BACKUP & RESTORE
 // =========================================
 function downloadBackup() {
     let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
@@ -203,13 +204,12 @@ function restoreBackup(i) {
     r.readAsText(f);
 }
 
-// --- CLOUD BACKUP (FIXED LOGIC) ---
+// --- CLOUD BACKUP ---
 function initFirebaseAndBackup() { let u=firebase.auth().currentUser; if(u) performCloudBackup(u.uid); else document.getElementById("loginModal").style.display="flex"; }
 function firebaseLogin() { auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; alert("Logged In!"); performCloudBackup(u.user.uid); }).catch(e=>alert(e.message)); }
 function firebaseRegister() { auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; alert("Registered!"); performCloudBackup(u.user.uid); }).catch(e=>alert(e.message)); }
 
 function performCloudBackup(uid) {
-    // 1. Prepare Data string (matches Android structure)
     let fullData = {
         transactions: localStorage.getItem("transactions") || "[]",
         accounts: localStorage.getItem("accounts") || "{}",
@@ -218,33 +218,23 @@ function performCloudBackup(uid) {
     let jsonString = JSON.stringify(fullData);
     let dateStr = new Date().toLocaleString();
     let ts = Date.now();
-
-    // 2. Logic: Get existing backups -> Check limit -> Push new
-    const ref = db.ref('users/' + uid + '/backups'); // Notice 'backups' with 's' to match Android
+    const ref = db.ref('users/' + uid + '/backups');
     
     ref.once('value').then(snapshot => {
         let count = snapshot.numChildren();
         if (count >= 10) {
-            // Delete oldest (Android logic compatibility)
-            // Ideally we query limitToFirst(1), but simple way here:
             let keys = Object.keys(snapshot.val() || {});
             if(keys.length > 0) ref.child(keys[0]).remove(); 
         }
-        
-        // Push new data (Matching Android Structure)
-        ref.push().set({
-            data: jsonString,
-            timestamp: ts,
-            date_label: dateStr
-        }).then(() => alert("✅ Cloud Backup Successful!"))
-          .catch(e => alert("Backup Error: " + e.message));
+        ref.push().set({ data: jsonString, timestamp: ts, date_label: dateStr })
+           .then(() => alert("✅ Cloud Backup Successful!"))
+           .catch(e => alert("Backup Error: " + e.message));
     });
 }
 
 function restoreFromCloud() {
     let u = firebase.auth().currentUser;
     if (!u) { alert("Please Login first!"); return; }
-
     document.getElementById("restoreModal").style.display = "flex";
     const listDiv = document.getElementById("restoreList");
     listDiv.innerHTML = "Loading...";
@@ -252,11 +242,7 @@ function restoreFromCloud() {
     const ref = db.ref('users/' + u.uid + '/backups');
     ref.orderByChild('timestamp').limitToLast(10).once('value').then(snapshot => {
         listDiv.innerHTML = "";
-        if (!snapshot.exists()) {
-            listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>";
-            return;
-        }
-
+        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
         snapshot.forEach(child => {
             let val = child.val();
             let btn = document.createElement("button");
@@ -264,7 +250,6 @@ function restoreFromCloud() {
             btn.style.marginBottom = "10px";
             btn.innerText = "📅 " + (val.date_label || "Unknown Date");
             btn.onclick = () => confirmRestore(val.data);
-            // Prepend to show newest first
             listDiv.insertBefore(btn, listDiv.firstChild); 
         });
     });
@@ -274,20 +259,14 @@ function confirmRestore(jsonString) {
     if (confirm("Restore this backup? Current data will be replaced.")) {
         try {
             let d = JSON.parse(jsonString);
-            // Support both formats (just in case)
             if (d.transactions) {
                 localStorage.setItem("transactions", d.transactions);
                 localStorage.setItem("accounts", d.accounts);
                 localStorage.setItem("hidden_accounts", d.hidden_accounts || "[]");
-            } else {
-                // If legacy android backup format was different, try direct parse
-                // Assuming standard format above is what we stick to.
             }
             alert("✅ Restore Successful! App reloading.");
             location.reload();
-        } catch (e) {
-            alert("Restore Failed: Invalid Data format.");
-        }
+        } catch (e) { alert("Restore Failed: Invalid Data."); }
     }
 }
 
@@ -295,7 +274,7 @@ function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document
 function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); alert("Saved!"); }
 
 // =========================================
-// 7. ACCOUNTS & REPORTS
+// 7. ACCOUNTS & REPORTS (FULL PDF REPORT LOGIC)
 // =========================================
 function initAccountScreen() {
     let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
@@ -323,18 +302,82 @@ function initReportsScreen() {
     let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2030;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
     document.getElementById("repMonth").value=new Date().getMonth()+1;
 }
+
+// --- FULL REPORT GENERATOR (REPLACED) ---
 function generateReport() {
-    let sy=parseInt(document.getElementById("repYear").value), sm=parseInt(document.getElementById("repMonth").value);
-    let tr=JSON.parse(localStorage.getItem("transactions"))||[], ta=0, tl=0, te=0, ti=0, tx=0;
-    tr.forEach(t=>{
-        if(parseInt(t.year)<sy || (parseInt(t.year)==sy && parseInt(t.month)<=sm)) {
-            let a=parseFloat(t.amount);
+    let sY = parseInt(document.getElementById("repYear").value);
+    let sM = parseInt(document.getElementById("repMonth").value);
+    let output = document.getElementById("report-output");
+    let tr = JSON.parse(localStorage.getItem("transactions")) || [];
+    let accounts = JSON.parse(localStorage.getItem("accounts")) || {};
+    let hidden = JSON.parse(localStorage.getItem("hidden_accounts")) || [];
+    
+    let html = `<h2 class="text-center">FULL FINANCIAL REPORT</h2><p class="text-center">Year: ${sY} | Month: ${sM}</p><hr>`;
+
+    // 1. TRIAL BALANCE
+    html += `<div class="report-section"><h3 class="text-center">1. TRIAL BALANCE</h3><table class="tb-table"><thead><tr><th>Account Name</th><th>Dr</th><th>Cr</th></tr></thead><tbody>`;
+    let totTbDr = 0, totTbCr = 0, allAccNames = [];
+    Object.keys(accounts).forEach(type => { accounts[type].forEach(acc => { if(!hidden.includes(acc)) allAccNames.push(acc); }); });
+    allAccNames.sort();
+
+    allAccNames.forEach(acc => {
+        let bal = 0;
+        tr.forEach(t => {
+            let tY = parseInt(t.year), tM = parseInt(t.month);
+            if (tY < sY || (tY == sY && tM <= sM)) {
+                let a = parseFloat(t.amount);
+                if (t.dr_acc === acc) bal += a; if (t.cr_acc === acc) bal -= a;
+            }
+        });
+        if (bal !== 0) {
+            if (bal > 0) totTbDr += bal; else totTbCr += Math.abs(bal);
+            html += `<tr><td>${acc}</td><td class="text-right">${bal > 0 ? bal.toFixed(2) : ""}</td><td class="text-right">${bal < 0 ? Math.abs(bal).toFixed(2) : ""}</td></tr>`;
+        }
+    });
+    html += `<tr class="bold" style="background:#f0f0f0;"><td>TOTALS</td><td class="text-right">${totTbDr.toFixed(2)}</td><td class="text-right">${totTbCr.toFixed(2)}</td></tr></tbody></table></div>`;
+
+    // 2. LEDGERS
+    html += `<div class="print-page-break"></div><h3 class="text-center">2. GENERAL LEDGER</h3>`;
+    allAccNames.forEach(acc => {
+        let openBal = 0;
+        tr.forEach(t => {
+            let tY = parseInt(t.year), tM = parseInt(t.month);
+            if (tY < sY || (tY == sY && tM < sM)) { let a = parseFloat(t.amount); if (t.dr_acc === acc) openBal += a; if (t.cr_acc === acc) openBal -= a; }
+        });
+        let drHtml = "", crHtml = "", monthDr = 0, monthCr = 0;
+        if (openBal !== 0) {
+            let bfRow = `<div class="t-item t-bf">B/F: ${Math.abs(openBal).toFixed(2)}</div>`;
+            if (openBal > 0) { drHtml += bfRow; monthDr += openBal; } else { crHtml += bfRow; monthCr += Math.abs(openBal); }
+        }
+        let hasTrans = false;
+        tr.forEach(t => {
+            if (parseInt(t.year) == sY && parseInt(t.month) == sM) {
+                let a = parseFloat(t.amount);
+                if (t.dr_acc === acc) { drHtml += `<div class="t-item">${t.date} | ${t.cr_acc} : ${a}</div>`; monthDr += a; hasTrans = true; }
+                else if (t.cr_acc === acc) { crHtml += `<div class="t-item">${t.date} | ${t.dr_acc} : ${a}</div>`; monthCr += a; hasTrans = true; }
+            }
+        });
+        if (openBal !== 0 || hasTrans) {
+            let finalBal = monthDr - monthCr;
+            html += `<div class="t-account-container" style="margin-top:20px; page-break-inside: avoid;"><h4 class="text-center" style="margin:5px; background:#ddd;">${acc}</h4><div class="t-header"><div class="t-col dr-col">Dr</div><div class="t-col cr-col">Cr</div></div><div class="t-body"><div class="t-col-content" style="border-right:1px solid #000;">${drHtml}</div><div class="t-col-content">${crHtml}</div></div><div class="t-footer"><div class="t-total text-center" style="border-right:1px solid #000;">${monthDr.toFixed(2)}</div><div class="t-total text-center">${monthCr.toFixed(2)}</div></div><div style="text-align:center; padding:5px; font-weight:bold; color:${finalBal >= 0 ? "green" : "red"}; border-top:1px solid #000;">Balance c/d: ${finalBal.toFixed(2)}</div></div>`;
+        }
+    });
+
+    // 3. FINANCIAL STATEMENTS
+    html += `<div class="print-page-break"></div><h3 class="text-center">3. FINANCIAL POSITION</h3>`;
+    let ta=0, tl=0, te=0, ti=0, tx=0;
+    tr.forEach(t => {
+        let tY=parseInt(t.year), tM=parseInt(t.month);
+        if (tY < sY || (tY == sY && tM <= sM)) {
+            let a = parseFloat(t.amount);
             if(t.dr_type=="වත්කම්") ta+=a; if(t.dr_type=="වියදම්") tx+=a; if(t.dr_type=="වගකීම්") tl-=a; if(t.dr_type=="හිමිකම්") te-=a; if(t.dr_type=="ආදායම්") ti-=a;
             if(t.cr_type=="වත්කම්") ta-=a; if(t.cr_type=="වියදම්") tx-=a; if(t.cr_type=="වගකීම්") tl+=a; if(t.cr_type=="හිමිකම්") te+=a; if(t.cr_type=="ආදායම්") ti+=a;
         }
     });
-    let na=ta-tl, np=ti-tx, tre=te+np;
-    document.getElementById("report-output").innerText=`FINANCIAL POSITION (${sy}-${sm})\n\nTotal Assets: ${ta.toFixed(2)}\n(-) Liabilities: (${tl.toFixed(2)})\n------------------\nNET ASSETS: ${na.toFixed(2)}\n\nCapital: ${te.toFixed(2)}\n(+) Profit: ${np.toFixed(2)}\n------------------\nTRUE EQUITY: ${tre.toFixed(2)}\n\n` + (Math.abs(na-tre)<1?"✅ BALANCED":"❌ UNBALANCED");
+    let netAssets = ta - tl, netProfit = ti - tx, trueEquity = te + netProfit;
+    html += `<div style="border:1px solid #000; padding:15px; font-family:monospace;"><p><strong>INCOME STATEMENT</strong></p><p>Total Income: <span style="float:right">${ti.toFixed(2)}</span></p><p>Total Expenses: <span style="float:right">(${tx.toFixed(2)})</span></p><hr><p><strong>NET PROFIT: <span style="float:right">${netProfit.toFixed(2)}</span></strong></p><br><p><strong>FINANCIAL POSITION</strong></p><p>Total Assets: <span style="float:right">${ta.toFixed(2)}</span></p><p>(-) Liabilities: <span style="float:right">(${tl.toFixed(2)})</span></p><hr><p><strong>NET ASSETS: <span style="float:right">${netAssets.toFixed(2)}</span></strong></p><br><p><strong>EQUITY CHECK</strong></p><p>Capital B/F: <span style="float:right">${te.toFixed(2)}</span></p><p>(+) Net Profit: <span style="float:right">${netProfit.toFixed(2)}</span></p><hr><p><strong>TOTAL EQUITY: <span style="float:right">${trueEquity.toFixed(2)}</span></strong></p><br><h4 class="text-center">${Math.abs(netAssets - trueEquity) < 1.0 ? "✅ BALANCED" : "❌ UNBALANCED"}</h4></div>`;
+
+    output.innerHTML = html;
 }
 function printReport() { let c=document.getElementById("report-output").innerText; if(!c||c.includes("Select")) alert("Generate first!"); else window.print(); }
 
