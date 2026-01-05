@@ -324,7 +324,7 @@ function performCloudBackup(uid) {
     const ref = db.ref('users/' + uid + '/backups');
     ref.once('value').then(snapshot => {
         let count = snapshot.numChildren();
-        if (count >= 10) { let keys = Object.keys(snapshot.val() || {}); if(keys.length > 0) ref.child(keys[0]).remove(); }
+        if (count >= 5) { let keys = Object.keys(snapshot.val() || {}); if(keys.length > 0) ref.child(keys[0]).remove(); }
         ref.push().set({ data: jsonString, timestamp: ts, date_label: dateStr })
            .then(() => showAlert("Success","Backup Success!"))
            .catch(e => showAlert("Error",e.message));
