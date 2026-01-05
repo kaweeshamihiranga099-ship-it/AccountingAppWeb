@@ -262,64 +262,106 @@ function performCloudBackup(uid) {
     });
 }
 
+// =========================================
+// REPLACED RESTORE LOGIC (Paste this over old functions)
+// =========================================
+
 function restoreFromCloud() {
     let u = firebase.auth().currentUser;
-    if (!u) { showAlert("Error","Please Login first!"); return; }
+    if (!u) { showAlert("Error", "Please Login first!"); return; }
+    
     document.getElementById("restoreModal").style.display = "flex";
     const listDiv = document.getElementById("restoreList");
-    listDiv.innerHTML = "Loading...";
+    listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
 
-    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value').then(snapshot => {
+    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value')
+    .then(snapshot => {
         listDiv.innerHTML = "";
-        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups.</p>"; return; }
+        if (!snapshot.exists()) { 
+            listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; 
+            return; 
+        }
         
         let backups = [];
-        snapshot.forEach(child => { backups.unshift(child.val()); });
+        snapshot.forEach(child => {
+            // Key එකත් එක්කම දත්ත ගන්න
+            let item = child.val();
+            item.key = child.key;
+            backups.unshift(item); 
+        });
         
         backups.forEach(val => {
             let btn = document.createElement("button");
             btn.className = "action-btn btn-indigo";
             btn.style.marginBottom = "10px";
-            btn.innerText = "📅 " + (val.date_label || "Unknown Date");
+            // දිනය සහ වේලාව පෙන්වන්න
+            let dateLabel = val.date_label || new Date(val.timestamp).toLocaleString();
+            btn.innerText = "📅 " + dateLabel;
+            
+            // Click කළාම දත්ත යවන්න (val.data එක String ද Object ද කියා නොබලා)
             btn.onclick = () => confirmRestore(val.data);
+            
             listDiv.appendChild(btn);
         });
+    })
+    .catch(error => {
+        listDiv.innerHTML = "<p style='text-align:center; color:red'>Error loading data.</p>";
+        console.error(error);
     });
 }
 
-function confirmRestore(jsonString) {
-    showAlert("Confirm", "Restore this data?", true, function() {
+function confirmRestore(rawData) {
+    showAlert("Confirm", "Restore this backup? Current data will be replaced.", true, function() {
         try {
-            let d = JSON.parse(jsonString);
-            processRestoreData(d);
-        } catch (e) { showAlert("Error", "Restore Failed!"); }
+            // දත්තය String එකක් නම් Parse කරන්න, නැත්නම් කෙලින්ම ගන්න
+            let finalData = (typeof rawData === 'string') ? JSON.parse(rawData) : rawData;
+            
+            // සමහර විට Android එකෙන් Double Stringify වෙලා එන්න පුළුවන්
+            if (typeof finalData === 'string') {
+                try { finalData = JSON.parse(finalData); } catch(e) {}
+            }
+
+            processRestoreData(finalData);
+        } catch (e) { 
+            showAlert("Error", "Restore Failed: Data Corrupted.\n" + e.message); 
+        }
     });
 }
 
-// SMART RESTORE: Cleans Data on Restore
 function processRestoreData(d) {
     try {
-        const fixData = (data) => {
-            if (typeof data === 'string') {
-                if (data.startsWith("[") || data.startsWith("{")) return data;
-                return data; 
+        if (!d) throw new Error("Empty Data");
+
+        // Helper function to ensure we save strings to localStorage
+        const saveToLocal = (key, data) => {
+            if (!data) return;
+            if (typeof data === 'object') {
+                localStorage.setItem(key, JSON.stringify(data));
+            } else {
+                localStorage.setItem(key, data);
             }
-            return JSON.stringify(data);
         };
 
-        if (d.transactions) localStorage.setItem("transactions", fixData(d.transactions));
-        if (d.accounts) localStorage.setItem("accounts", fixData(d.accounts));
-        if (d.hidden_accounts) localStorage.setItem("hidden_accounts", fixData(d.hidden_accounts));
+        // 1. Restore Transactions
+        if (d.transactions) saveToLocal("transactions", d.transactions);
+        
+        // 2. Restore Accounts
+        if (d.accounts) saveToLocal("accounts", d.accounts);
+        
+        // 3. Restore Hidden Accounts
+        if (d.hidden_accounts) saveToLocal("hidden_accounts", d.hidden_accounts);
 
-        // Immediately run fix to trim spaces
+        // 4. Auto Fix Spaces (අර කලින් දුන්න කේතය)
         fixDataIntegrity();
 
-        showAlert("Success", "Restored! Reloading...");
-        setTimeout(() => location.reload(), 1500);
+        showAlert("Success", "Restored Successfully! App will reload.");
+        setTimeout(() => location.reload(), 2000);
+
     } catch(e) {
-        showAlert("Error", "Data Error: " + e.message);
+        showAlert("Error", "Processing Error: " + e.message);
     }
 }
+
 
 function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
 function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
