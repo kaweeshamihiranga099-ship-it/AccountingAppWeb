@@ -341,3 +341,44 @@ input:checked + .slider:before { transform: translateX(20px); }
     .back-btn, .filters-box { display: none !important; }
     .report-paper { border: none; box-shadow: none; }
 }
+
+
+
+/* --- FULL REPORT PRINT STYLES --- */
+.report-section {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px dashed #ccc;
+}
+
+.print-page-break {
+    page-break-before: always; /* Print කරන විට අලුත් පිටුවකින් පටන් ගන්න */
+    margin-top: 30px;
+    display: block;
+}
+
+.tb-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 12px;
+}
+.tb-table th, .tb-table td {
+    border: 1px solid #333;
+    padding: 6px;
+    text-align: left;
+}
+.tb-table th { background-color: #eee; text-align: center; }
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.bold { font-weight: bold; }
+
+/* Print කරන විට පාට සහ බොත්තම් සැඟවීම */
+@media print {
+    .report-paper { border: none; box-shadow: none; width: 100%; margin: 0; padding: 0; }
+    .t-header { background-color: #ccc !important; color: black !important; -webkit-print-color-adjust: exact; }
+    .dr-col, .cr-col { border: 1px solid #000; }
+    body { background-color: white; }
+}
+
+
