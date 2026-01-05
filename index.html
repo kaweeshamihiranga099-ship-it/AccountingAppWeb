@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>My Ledger</title>
+    
     <link rel="icon" type="image/png" href="logo.png">
     <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#000000">
-
-<link rel="apple-touch-icon" href="logo.png">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="logo.png">
 
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
@@ -101,11 +102,18 @@
         <div class="filters-box">
             <label>Type:</label><select id="accTypeSelect" class="form-select" onchange="updateAccountFilterList()"></select>
             <label>Account:</label><select id="accSelect" class="form-select"></select>
-            <div style="display: flex; gap: 10px;"><div style="flex:1"><label>Year:</label><select id="yearSelect" class="form-select"></select></div><div style="flex:1"><label>Month:</label><select id="monthSelect" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div></div>
+            <div style="display: flex; gap: 10px;">
+                <div style="flex:1"><label>Year:</label><select id="yearSelect" class="form-select"></select></div>
+                <div style="flex:1"><label>Month:</label><select id="monthSelect" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div>
+            </div>
             <button class="action-btn btn-indigo" onclick="showAccountDetails()">Show Ledger</button>
         </div>
         <h3 id="tAccTitle" style="text-align:center; margin-bottom: 5px;">- Select Account -</h3>
-        <div class="t-account-container"><div class="t-header"><div class="t-col dr-col">Dr (හර)</div><div class="t-col cr-col">Cr (බැර)</div></div><div class="t-body"><div class="t-col-content" id="drContent"></div><div class="t-divider"></div><div class="t-col-content" id="crContent"></div></div><div class="t-footer"><div class="t-total" id="drTotal">0.00</div><div class="t-total" id="crTotal">0.00</div></div></div>
+        <div class="t-account-container">
+            <div class="t-header"><div class="t-col dr-col">Dr (හර)</div><div class="t-col cr-col">Cr (බැර)</div></div>
+            <div class="t-body"><div class="t-col-content" id="drContent"></div><div class="t-divider"></div><div class="t-col-content" id="crContent"></div></div>
+            <div class="t-footer"><div class="t-total" id="drTotal">0.00</div><div class="t-total" id="crTotal">0.00</div></div>
+        </div>
         <div id="finalBalanceBox" class="balance-box">Balance c/d: 0.00</div>
     </div>
 
@@ -114,8 +122,11 @@
         <h2 style="text-align:center; margin: 10px 0;">Financial Reports 📈</h2>
         <div class="filters-box">
             <div style="display: flex; gap: 10px;"><div style="flex:1"><label>Year:</label><select id="repYear" class="form-select"></select></div><div style="flex:1"><label>Month:</label><select id="repMonth" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div></div>
-            <button class="action-btn btn-green" onclick="generateReport()">Generate Summary</button><div style="height: 5px;"></div><button class="action-btn btn-red" onclick="printReport()">🖨️ Print / Save as PDF❗(Not working for web version.only for Android application)
-                </button><div style="height: 5px;"></div><button class="action-btn btn-indigo" onclick="navigateTo('charts')">📊 View Charts Analysis</button>
+            <button class="action-btn btn-green" onclick="generateReport()">Generate Summary</button>
+            <div style="height: 5px;"></div>
+            <button class="action-btn btn-red" onclick="printReport()">🖨️ Print / Save as PDF❗(Not working for web version.only for Android application)</button>
+            <div style="height: 5px;"></div>
+            <button class="action-btn btn-indigo" onclick="navigateTo('charts')">📊 View Charts Analysis</button>
         </div>
         <div id="report-output" class="report-paper"><p style="text-align:center; color:#888; margin-top:20px;">Select Year/Month and click "Generate Summary"</p></div>
     </div>
@@ -124,6 +135,17 @@
         <button class="back-btn" onclick="navigateTo('reports')" style="background: white; border: none; margin-bottom: 15px;">⬅ Back to Reports</button>
         <div style="text-align:center; padding:15px; background:white; border-radius:10px; margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);"><h2 style="color:#444; margin:0;">FINANCIAL CHARTS</h2><p id="chartTitle" style="color:#888; margin:5px 0 0 0;">Loading...</p></div>
         <div id="chartsContainer"></div>
+    </div>
+
+    <div id="customAlert" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h3 id="alertTitle">Title</h3>
+            <p id="alertMessage">Message...</p>
+            <div class="modal-buttons">
+                <button id="btnAlertCancel" class="action-btn btn-red" onclick="closeCustomAlert()" style="display:none;">Cancel</button>
+                <button id="btnAlertOk" class="action-btn btn-blue" onclick="closeCustomAlert()">OK</button>
+            </div>
+        </div>
     </div>
 
     <div id="loginModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
@@ -153,7 +175,7 @@
         </div>
     </div>
 
-    <script src="script.js"></scrip>
+    <script src="script.js"></script>
 
     <script>
         if ('serviceWorker' in navigator) {
@@ -167,6 +189,3 @@
 </body>
 </html>
 
-    
-</body>
-</html>
