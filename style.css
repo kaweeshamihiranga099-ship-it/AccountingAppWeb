@@ -1,3 +1,4 @@
+
 /* =========================================
    1. GLOBAL STYLES & RESET
    ========================================= */
@@ -205,4 +206,3 @@ input:checked + .slider { background-color: #2196F3; } input:checked + .slider:b
     .t-col-content, .t-total { border-right: 1px solid #000 !important; }
     table, th, td { border: 1px solid black !important; }
 }
-
