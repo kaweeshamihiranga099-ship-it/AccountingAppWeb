@@ -379,7 +379,9 @@ function generateReport() {
 
     output.innerHTML = html;
 }
-function printReport() { let c=document.getElementById("report-output").innerText; if(!c||c.includes("Select")) alert("Generate first!"); else window.print(); }
+function printReport() {
+    alart("ඔබට pdf එකක් අවශ්‍යනම් හෝ Android app එක බාගත කර ගැනීමට අවශ්‍ය නම් +94 715527239 යන Whatsapp අංකයට දැනුම් දෙන්න.එවිට ඔබට pdf එක හෝ Apk ගොනුව ලබා ගත හැක.ස්තූතියි 😊");
+                       }
 
 // =========================================
 // 8. CHARTS
