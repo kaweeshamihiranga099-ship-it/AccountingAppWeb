@@ -290,8 +290,31 @@ function restoreBackup(i) {
     r.readAsText(f);
 }
 function initFirebaseAndBackup() { let u=firebase.auth().currentUser; if(u) performCloudBackup(u.uid); else document.getElementById("loginModal").style.display="flex"; }
-function firebaseLogin() { auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Logged In!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
-function firebaseRegister() { auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success","Registered!"); performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error",e.message)); }
+// =========================================
+// FIREBASE LOGIN & REGISTER (AUTO BACKUP ඉවත් කරන ලදී)
+// =========================================
+
+function firebaseLogin() { 
+    auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
+    .then(u => { 
+        document.getElementById("loginModal").style.display = "none"; 
+        showAlert("Success", "Logged In Successfully!"); 
+        // performCloudBackup(u.user.uid); // <-- මෙම පේළිය ඉවත් කරන ලදී (Auto Backup නතර කිරීමට)
+    })
+    .catch(e => showAlert("Error", e.message)); 
+}
+
+function firebaseRegister() { 
+    auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
+    .then(u => { 
+        document.getElementById("loginModal").style.display = "none"; 
+        showAlert("Success", "Registered Successfully!"); 
+        // performCloudBackup(u.user.uid); // <-- මෙම පේළිය ඉවත් කරන ලදී
+    })
+    .catch(e => showAlert("Error", e.message)); 
+}
+
+
 
 function performCloudBackup(uid) {
     let fullData = { transactions: localStorage.getItem("transactions") || "[]", accounts: localStorage.getItem("accounts") || "{}", hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" };
