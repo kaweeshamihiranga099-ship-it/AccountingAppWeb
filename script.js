@@ -359,15 +359,14 @@ function toggleAutoBackup() {
 // 7. BACKUP LOGIC (DAILY LIMIT & DATE FIX)
 // =========================================
 function initFirebaseAndBackup() { 
-    let u=auth.currentUser; 
+    let u = auth.currentUser; 
     if(u) {
-        // For manual backup, we bypass the date check or just call performCloudBackup 
-        // Note: performCloudBackup enforces daily limit. 
-        // If you want manual override, we'd need a separate function or flag.
-        // For now, it respects the rule.
-        performCloudBackup(u.uid); 
+        // මෙතැන 'true' යැවීම මගින් මෙය Manual Backup එකක් බව දන්වයි
+        performCloudBackup(u.uid, true); 
     }
-    else document.getElementById("loginModal").style.display="flex"; 
+    else {
+        document.getElementById("loginModal").style.display="flex"; 
+    }
 }
 
 function firebaseLogin() { 
@@ -388,21 +387,28 @@ function firebaseRegister() {
     }).catch(e => showAlert("Error", e.message)); 
 }
 
-function performCloudBackup(uid) {
-    // 1. Check if Switch is OFF
-    if (localStorage.getItem("auto_backup_enabled") === "false") return;
+function performCloudBackup(uid, isManual = false) {
+    
+    // --- Manual Backup නොවේ නම් පමණක් නීති පරීක්ෂා කරන්න ---
+    if (!isManual) {
+        // 1. Switch එක OFF නම් නවතින්න
+        if (localStorage.getItem("auto_backup_enabled") === "false") {
+            console.log("Auto Backup is OFF");
+            return;
+        }
 
-    // 2. Daily Limit Check
-    let now = new Date();
-    let todayDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
-    let lastBackup = localStorage.getItem("last_backup_date_log");
+        // 2. දිනපතා සීමාව (Daily Check)
+        let nowCheck = new Date();
+        let todayDate = nowCheck.getFullYear() + '-' + (nowCheck.getMonth() + 1).toString().padStart(2, '0') + '-' + nowCheck.getDate().toString().padStart(2, '0');
+        let lastBackup = localStorage.getItem("last_backup_date_log");
 
-    if (todayDate === lastBackup) {
-        console.log("Backup skipped: Already backed up today.");
-        return; 
+        if (todayDate === lastBackup) {
+            console.log("Skipping: Already backed up today.");
+            return; 
+        }
     }
 
-    // 3. Prepare Data
+    // --- දත්ත සකස් කිරීම ---
     let data = { 
         transactions: localStorage.getItem("transactions") || "[]", 
         accounts: localStorage.getItem("accounts") || "{}", 
@@ -410,27 +416,48 @@ function performCloudBackup(uid) {
     };
     
     let ts = Date.now();
-    // ✅ Date Label Fix: Show full date & time in list
-    let displayDate = now.toLocaleString('en-GB', { hour12: true }); 
+    let now = new Date();
+    // List එකේ පෙන්වන දිනය (Example: 2024-05-20 10:30:00)
+    let displayDate = now.getFullYear() + "-" + 
+                      (now.getMonth() + 1).toString().padStart(2, '0') + "-" + 
+                      now.getDate().toString().padStart(2, '0') + " " + 
+                      now.getHours().toString().padStart(2, '0') + ":" + 
+                      now.getMinutes().toString().padStart(2, '0') + ":" + 
+                      now.getSeconds().toString().padStart(2, '0');
 
+    // Firebase වෙත යැවීම
     db.ref('users/' + uid + '/backups').push({ 
         data: JSON.stringify(data), 
         timestamp: ts, 
-        date_label: displayDate // Fixes "Unknown" issue
+        date_label: displayDate 
     }).then(() => {
-        // Save today's date to local storage to enforce daily limit
+        
+        // සාර්ථක නම් අද දිනය Log කරන්න (Auto Backup සඳහා)
+        let todayDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
         localStorage.setItem("last_backup_date_log", todayDate);
         
-        // Cleanup old backups
+        // පැරණි Backups මකා දැමීම (Limit 10)
         db.ref('users/' + uid + '/backups').once('value').then(snap => {
             if(snap.numChildren() > 10) { 
                 let keys = Object.keys(snap.val()); 
                 db.ref('users/' + uid + '/backups/' + keys[0]).remove(); 
             }
         });
-        showAlert("Success", "Auto Backup Complete! ☁");
-    }).catch(e => console.error("Backup Failed", e));
+        
+        // Manual නම් පණිවිඩයක් පෙන්වන්න
+        if (isManual) {
+            showAlert("Success", "Manual Backup Successful! ☁✅");
+        } else {
+            console.log("Auto Backup Complete.");
+        }
+
+    }).catch(e => {
+        console.error("Backup Failed", e);
+        if (isManual) showAlert("Error", "Backup Failed: " + e.message);
+    });
 }
+
+
 
 function restoreFromCloud() {
     let u = auth.currentUser;
