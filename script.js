@@ -118,31 +118,147 @@ function listenForAdminMessages(uid) {
 // =========================================
 // 4. PASSWORD & AUTH
 // =========================================
+// =========================================
+// 4. PASSWORD & AUTH & UI THEME
+// =========================================
+
+// ඇප් එක පූරණය වන විට (Load) තේමාව යොදන්න
 function navigateToPassword() {
-    let el = document.getElementById("password-screen"); el.style.display="flex";
+    let el = document.getElementById("password-screen"); 
+    el.style.display = "flex";
+    
+    // කලින් Save කරපු Color Mode එක ගන්න (Default: true)
+    let savedMode = localStorage.getItem(colorModeKey);
+    let isColorful = savedMode !== "false"; // If null or "true", it's true.
+    
+    // Switch එකේ අගය සකසන්න
+    document.getElementById("colorModeSwitch").checked = isColorful;
+    
+    // තේමාව ක්‍රියාත්මක කරන්න
+    applyGlobalTheme(isColorful);
+
     let stored = localStorage.getItem(savedPinKey);
-    state = !stored ? 2 : 0; updatePasswordUI();
+    state = !stored ? 2 : 0; 
+    updatePasswordUI();
 }
-function toggleColorMode() { localStorage.setItem(colorModeKey, document.getElementById("colorModeSwitch").checked); }
+
+// Switch එක වෙනස් කරන විට ක්‍රියාත්මක වන ශ්‍රිතය
+function toggleColorMode() { 
+    let isChecked = document.getElementById("colorModeSwitch").checked;
+    localStorage.setItem(colorModeKey, isChecked); 
+    applyGlobalTheme(isChecked);
+}
+
+// මුළු ඇප් එකටම වර්ණ තේමාව යෙදීම
+function applyGlobalTheme(isColorful) {
+    // 1. Password Screen එක වෙනස් කිරීම
+    let passScreen = document.getElementById("password-screen");
+    let passTitle = document.getElementById("passTitle");
+    let passSub = document.getElementById("passSub");
+    let backBtn = document.querySelector(".keypad-grid button[onclick*='back']");
+    
+    if (isColorful) {
+        // Colorful Gradient Mode
+        passScreen.style.background = "linear-gradient(to bottom, #18FFFF, #E040FB, #000000, #E040FB, #76FF03)";
+        passTitle.style.color = "white";
+        passSub.style.color = "#f0f0f0";
+        if(backBtn) backBtn.style.color = "white";
+        
+        // Keypad Buttons Transparent Look
+        document.querySelectorAll(".keypad-grid button").forEach(btn => {
+            btn.style.background = "rgba(255,255,255,0.2)";
+            btn.style.color = "white";
+        });
+        
+    } else {
+        // Clean White Mode
+        passScreen.style.background = "#f5f5f5";
+        passTitle.style.color = "#333";
+        passSub.style.color = "#666";
+        if(backBtn) backBtn.style.color = "#333";
+
+        // Keypad Buttons Clean Look
+        document.querySelectorAll(".keypad-grid button").forEach(btn => {
+            btn.style.background = "white";
+            btn.style.color = "#333";
+            btn.style.boxShadow = "0 2px 5px rgba(0,0,0,0.1)";
+        });
+    }
+
+    // 2. අනිත් සෑම Screen එකකම පසුබිම වෙනස් කිරීම
+    let allScreens = document.querySelectorAll(".screen");
+    allScreens.forEach(sc => {
+        if(sc.id !== "password-screen" && sc.id !== "splash-screen") {
+            if(isColorful) {
+                // Home/Settings සඳහා ලා පැහැති Gradient එකක්
+                sc.style.background = "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)";
+            } else {
+                // සාමාන්‍ය සුදු/අළු පැහැය
+                sc.style.background = "#f5f7fa";
+            }
+        }
+    });
+}
+
 function updatePasswordUI() {
-    currentPin = ""; updateDots(); let t=document.getElementById("passTitle"), s=document.getElementById("passSub"), b=document.getElementById("btnChangePin");
+    currentPin = ""; updateDots(); 
+    let t = document.getElementById("passTitle"), s = document.getElementById("passSub"), b = document.getElementById("btnChangePin");
+    
+    // UI එකේ පාට මාරු උනාම Text Color එක හරියට තියන්න
+    let isColorful = document.getElementById("colorModeSwitch").checked;
+    let textColor = isColorful ? "white" : "#333";
+    t.style.color = textColor;
+
     if(state==0){ t.innerText="Welcome Back"; s.innerText="Enter PIN"; b.style.display="block"; }
     if(state==1){ t.innerText="Security Check"; s.innerText="Enter OLD PIN"; b.style.display="none"; }
     if(state==2){ t.innerText="Set New PIN"; s.innerText="New 6-digit PIN"; b.style.display="none"; }
     if(state==3){ t.innerText="Confirm PIN"; s.innerText="Confirm PIN"; b.style.display="none"; }
 }
-function pressKey(k) { if(k=='back') currentPin=currentPin.slice(0,-1); else if(currentPin.length<6) currentPin+=k; updateDots(); if(currentPin.length==6) handlePinSubmit(); }
-function updateDots() { document.querySelectorAll(".dot").forEach((d,i)=>{ if(i<currentPin.length) d.classList.add("filled"); else d.classList.remove("filled"); }); }
+
+function pressKey(k) { 
+    if(k=='back') currentPin=currentPin.slice(0,-1); 
+    else if(currentPin.length<6) currentPin+=k; 
+    updateDots(); 
+    if(currentPin.length==6) handlePinSubmit(); 
+}
+
+function updateDots() { 
+    // Dot වල පාට තේමාව අනුව වෙනස් කිරීම
+    let isColorful = document.getElementById("colorModeSwitch").checked;
+    let dotColor = isColorful ? "white" : "#2196F3"; // Colorful එකේදී සුදු, නැත්නම් නිල්
+
+    document.querySelectorAll(".dot").forEach((d,i)=>{ 
+        d.style.borderColor = dotColor;
+        if(i<currentPin.length) {
+            d.classList.add("filled"); 
+            d.style.background = dotColor;
+        } else {
+            d.classList.remove("filled"); 
+            d.style.background = "transparent";
+        }
+    }); 
+}
+
 function handlePinSubmit() {
     let stored = localStorage.getItem(savedPinKey);
     setTimeout(() => {
-        if(state==0) { if(currentPin==stored) navigateTo('home'); else { showAlert("Error","Wrong PIN!"); updatePasswordUI(); } }
+        if(state==0) { 
+            if(currentPin==stored) {
+                // Home එකට යන විටත් තේමාව apply වී තිබේදැයි තහවුරු කරගන්න
+                applyGlobalTheme(document.getElementById("colorModeSwitch").checked);
+                navigateTo('home'); 
+            } else { 
+                showAlert("Error","Wrong PIN!"); updatePasswordUI(); 
+            } 
+        }
         else if(state==1) { if(currentPin==stored) { state=2; updatePasswordUI(); } else { showAlert("Error","Wrong Old PIN!"); updatePasswordUI(); } }
         else if(state==2) { tempNewPin=currentPin; state=3; updatePasswordUI(); }
         else if(state==3) { if(currentPin==tempNewPin) { localStorage.setItem(savedPinKey, currentPin); showAlert("Success","PIN Set!"); navigateTo('home'); } else { showAlert("Error","Mismatch!"); state=2; updatePasswordUI(); } }
     }, 200);
 }
+
 function startChangePin() { state=1; updatePasswordUI(); }
+
 
 // =========================================
 // 5. TRANSACTIONS
