@@ -1,12 +1,12 @@
 // =========================================
-// 1. GLOBAL CONFIG & FIREBASE
+// 1. GLOBAL CONFIG & FIREBASE SETUP
 // =========================================
 const accTypes = ["වත්කම්", "වගකීම්", "හිමිකම්", "ආදායම්", "වියදම්"];
 const savedPinKey = "user_pin";
 const colorModeKey = "ColorMode";
 let currentPin = "", state = 0, tempNewPin = "";
 
-// Firebase Config
+// Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDWCPkJB3VRkuLSIeDnE1Mk6z3YUPLMEnU",
     authDomain: "super-a0398-default-rtdb.firebaseapp.com",
@@ -25,7 +25,7 @@ try {
 } catch (e) { console.error("Firebase Init Error:", e); }
 
 // =========================================
-// 2. INITIALIZATION & HELPERS
+// 2. INITIALIZATION
 // =========================================
 window.addEventListener("load", function() {
     let savedScale = localStorage.getItem("app_scale");
@@ -33,9 +33,11 @@ window.addEventListener("load", function() {
     fixDataIntegrity(); 
     
     // Check for Admin Messages
-    auth.onAuthStateChanged(user => {
-        if(user) listenForAdminMessages(user.uid);
-    });
+    if(auth) {
+        auth.onAuthStateChanged(user => {
+            if(user) listenForAdminMessages(user.uid);
+        });
+    }
 
     setTimeout(function() {
         const splash = document.getElementById("splash-screen");
@@ -57,6 +59,7 @@ function fixDataIntegrity() {
         let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
         let acc = JSON.parse(localStorage.getItem("accounts") || "{}");
         let changed = false;
+        
         // Fix account spaces
         for (let type in acc) {
             acc[type] = acc[type].map(name => {
@@ -65,6 +68,7 @@ function fixDataIntegrity() {
                 return clean;
             });
         }
+        
         // Fix transaction spaces
         tr = tr.map(t => {
             let d = t.dr_acc ? t.dr_acc.trim() : "";
@@ -72,6 +76,7 @@ function fixDataIntegrity() {
             if(d !== t.dr_acc || c !== t.cr_acc) { t.dr_acc = d; t.cr_acc = c; changed = true; }
             return t;
         });
+
         if(changed) {
             localStorage.setItem("transactions", JSON.stringify(tr));
             localStorage.setItem("accounts", JSON.stringify(acc));
@@ -81,6 +86,7 @@ function fixDataIntegrity() {
 
 function navigateTo(name) {
     document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+    
     let id = name + "-screen";
     if (name === 'accounts') id = "account-screen";
     if (name === 'new-settings') id = "new-settings-screen";
@@ -88,6 +94,15 @@ function navigateTo(name) {
     let el = document.getElementById(id);
     if (el) {
         el.style.display = (name === 'password') ? 'flex' : 'block';
+        
+        // Apply Theme to background if needed
+        let isColorful = localStorage.getItem(colorModeKey) !== "false";
+        if(name !== 'password' && isColorful) {
+            el.style.background = "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)";
+        } else if (name !== 'password') {
+            el.style.background = "#f5f7fa";
+        }
+
         if (name === 'home') initHomeScreen();
         if (name === 'settings') initSettingsScreen();
         if (name === 'accounts') initAccountScreen();
@@ -108,33 +123,25 @@ function listenForAdminMessages(uid) {
             document.getElementById("adminMsgTitle").innerText = msg.title || "New Message";
             let bodyText = msg.body || "";
             if(msg.url) bodyText += `<br><br><a href="${msg.url}" target="_blank" style="color:blue; text-decoration:underline;">Click Here to Open Link</a>`;
+            
             document.getElementById("adminMsgBody").innerHTML = bodyText;
             document.getElementById("adminMsgModal").style.display = "flex";
-            snapshot.ref.remove(); 
+            
+            snapshot.ref.remove(); // Delete after showing
         }
     });
 }
 
 // =========================================
-// 4. PASSWORD & AUTH
+// 4. PASSWORD & UI THEME (FIXED)
 // =========================================
-// =========================================
-// 4. PASSWORD & AUTH & UI THEME
-// =========================================
-
-// ඇප් එක පූරණය වන විට (Load) තේමාව යොදන්න
 function navigateToPassword() {
     let el = document.getElementById("password-screen"); 
     el.style.display = "flex";
     
-    // කලින් Save කරපු Color Mode එක ගන්න (Default: true)
     let savedMode = localStorage.getItem(colorModeKey);
-    let isColorful = savedMode !== "false"; // If null or "true", it's true.
-    
-    // Switch එකේ අගය සකසන්න
+    let isColorful = savedMode !== "false"; 
     document.getElementById("colorModeSwitch").checked = isColorful;
-    
-    // තේමාව ක්‍රියාත්මක කරන්න
     applyGlobalTheme(isColorful);
 
     let stored = localStorage.getItem(savedPinKey);
@@ -142,72 +149,42 @@ function navigateToPassword() {
     updatePasswordUI();
 }
 
-// Switch එක වෙනස් කරන විට ක්‍රියාත්මක වන ශ්‍රිතය
 function toggleColorMode() { 
     let isChecked = document.getElementById("colorModeSwitch").checked;
     localStorage.setItem(colorModeKey, isChecked); 
     applyGlobalTheme(isChecked);
 }
 
-// මුළු ඇප් එකටම වර්ණ තේමාව යෙදීම
 function applyGlobalTheme(isColorful) {
-    // 1. Password Screen එක වෙනස් කිරීම
     let passScreen = document.getElementById("password-screen");
     let passTitle = document.getElementById("passTitle");
     let passSub = document.getElementById("passSub");
     let backBtn = document.querySelector(".keypad-grid button[onclick*='back']");
     
     if (isColorful) {
-        // Colorful Gradient Mode
         passScreen.style.background = "linear-gradient(to bottom, #18FFFF, #E040FB, #000000, #E040FB, #76FF03)";
         passTitle.style.color = "white";
         passSub.style.color = "#f0f0f0";
         if(backBtn) backBtn.style.color = "white";
-        
-        // Keypad Buttons Transparent Look
         document.querySelectorAll(".keypad-grid button").forEach(btn => {
-            btn.style.background = "rgba(255,255,255,0.2)";
-            btn.style.color = "white";
+            btn.style.background = "rgba(255,255,255,0.2)"; btn.style.color = "white";
         });
-        
     } else {
-        // Clean White Mode
         passScreen.style.background = "#f5f5f5";
         passTitle.style.color = "#333";
         passSub.style.color = "#666";
         if(backBtn) backBtn.style.color = "#333";
-
-        // Keypad Buttons Clean Look
         document.querySelectorAll(".keypad-grid button").forEach(btn => {
-            btn.style.background = "white";
-            btn.style.color = "#333";
-            btn.style.boxShadow = "0 2px 5px rgba(0,0,0,0.1)";
+            btn.style.background = "white"; btn.style.color = "#333";
         });
     }
-
-    // 2. අනිත් සෑම Screen එකකම පසුබිම වෙනස් කිරීම
-    let allScreens = document.querySelectorAll(".screen");
-    allScreens.forEach(sc => {
-        if(sc.id !== "password-screen" && sc.id !== "splash-screen") {
-            if(isColorful) {
-                // Home/Settings සඳහා ලා පැහැති Gradient එකක්
-                sc.style.background = "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)";
-            } else {
-                // සාමාන්‍ය සුදු/අළු පැහැය
-                sc.style.background = "#f5f7fa";
-            }
-        }
-    });
 }
 
 function updatePasswordUI() {
     currentPin = ""; updateDots(); 
     let t = document.getElementById("passTitle"), s = document.getElementById("passSub"), b = document.getElementById("btnChangePin");
-    
-    // UI එකේ පාට මාරු උනාම Text Color එක හරියට තියන්න
     let isColorful = document.getElementById("colorModeSwitch").checked;
-    let textColor = isColorful ? "white" : "#333";
-    t.style.color = textColor;
+    t.style.color = isColorful ? "white" : "#333";
 
     if(state==0){ t.innerText="Welcome Back"; s.innerText="Enter PIN"; b.style.display="block"; }
     if(state==1){ t.innerText="Security Check"; s.innerText="Enter OLD PIN"; b.style.display="none"; }
@@ -216,26 +193,17 @@ function updatePasswordUI() {
 }
 
 function pressKey(k) { 
-    if(k=='back') currentPin=currentPin.slice(0,-1); 
-    else if(currentPin.length<6) currentPin+=k; 
-    updateDots(); 
-    if(currentPin.length==6) handlePinSubmit(); 
+    if(k=='back') currentPin=currentPin.slice(0,-1); else if(currentPin.length<6) currentPin+=k; 
+    updateDots(); if(currentPin.length==6) handlePinSubmit(); 
 }
 
 function updateDots() { 
-    // Dot වල පාට තේමාව අනුව වෙනස් කිරීම
     let isColorful = document.getElementById("colorModeSwitch").checked;
-    let dotColor = isColorful ? "white" : "#2196F3"; // Colorful එකේදී සුදු, නැත්නම් නිල්
-
+    let dotColor = isColorful ? "white" : "#2196F3";
     document.querySelectorAll(".dot").forEach((d,i)=>{ 
         d.style.borderColor = dotColor;
-        if(i<currentPin.length) {
-            d.classList.add("filled"); 
-            d.style.background = dotColor;
-        } else {
-            d.classList.remove("filled"); 
-            d.style.background = "transparent";
-        }
+        if(i<currentPin.length) { d.classList.add("filled"); d.style.background = dotColor; } 
+        else { d.classList.remove("filled"); d.style.background = "transparent"; }
     }); 
 }
 
@@ -243,31 +211,26 @@ function handlePinSubmit() {
     let stored = localStorage.getItem(savedPinKey);
     setTimeout(() => {
         if(state==0) { 
-            if(currentPin==stored) {
-                // Home එකට යන විටත් තේමාව apply වී තිබේදැයි තහවුරු කරගන්න
-                applyGlobalTheme(document.getElementById("colorModeSwitch").checked);
-                navigateTo('home'); 
-            } else { 
-                showAlert("Error","Wrong PIN!"); updatePasswordUI(); 
-            } 
+            if(currentPin==stored) { applyGlobalTheme(document.getElementById("colorModeSwitch").checked); navigateTo('home'); } 
+            else { showAlert("Error","Wrong PIN!"); updatePasswordUI(); } 
         }
         else if(state==1) { if(currentPin==stored) { state=2; updatePasswordUI(); } else { showAlert("Error","Wrong Old PIN!"); updatePasswordUI(); } }
         else if(state==2) { tempNewPin=currentPin; state=3; updatePasswordUI(); }
         else if(state==3) { if(currentPin==tempNewPin) { localStorage.setItem(savedPinKey, currentPin); showAlert("Success","PIN Set!"); navigateTo('home'); } else { showAlert("Error","Mismatch!"); state=2; updatePasswordUI(); } }
     }, 200);
 }
-
 function startChangePin() { state=1; updatePasswordUI(); }
 
-
 // =========================================
-// 5. TRANSACTIONS
+// 5. TRANSACTIONS & HOME
 // =========================================
 function initHomeScreen() {
     let d=document.getElementById("spinDrType"), c=document.getElementById("spinCrType"); d.innerHTML=""; c.innerHTML="";
     accTypes.forEach(t => { d.innerHTML+=`<option>${t}</option>`; c.innerHTML+=`<option>${t}</option>`; });
     updateAccountList('dr'); updateAccountList('cr');
+    setupLongPress();
 }
+
 function updateAccountList(s) {
     let t = document.getElementById(s=='dr'?"spinDrType":"spinCrType").value;
     let a = document.getElementById(s=='dr'?"spinDrAcc":"spinCrAcc"); a.innerHTML="";
@@ -275,26 +238,51 @@ function updateAccountList(s) {
     let h = JSON.parse(localStorage.getItem("hidden_accounts") || "[]");
     if(all[t]) all[t].forEach(n => { if(!h.includes(n)) a.innerHTML+=`<option>${n}</option>`; });
 }
+
 function saveTransaction() {
     let dt=document.getElementById("spinDrType").value, da=document.getElementById("spinDrAcc").value;
     let ct=document.getElementById("spinCrType").value, ca=document.getElementById("spinCrAcc").value;
     let am=document.getElementById("edAmt").value, de=document.getElementById("edDesc").value;
+    
     if(!da || !ca || !am) { showAlert("Error", "Missing Data!"); return; }
-    let tr={ year: new Date().getFullYear().toString(), month: (new Date().getMonth()+1).toString(), date: getLocalTodayDate(), dr_type:dt, dr_acc:da.trim(), cr_type:ct, cr_acc:ca.trim(), amount:am, desc:de };
+    
+    let tr={
+        year: new Date().getFullYear().toString(), 
+        month: (new Date().getMonth()+1).toString(), 
+        date: getLocalTodayDate(),
+        dr_type:dt, dr_acc:da.trim(), 
+        cr_type:ct, cr_acc:ca.trim(), 
+        amount:am, desc:de
+    };
+    
     let arr = JSON.parse(localStorage.getItem("transactions") || "[]");
     arr.push(tr); 
     localStorage.setItem("transactions", JSON.stringify(arr));
-    showAlert("Success", "Saved! ✅"); document.getElementById("edAmt").value=""; document.getElementById("edDesc").value="";
+    
+    showAlert("Success", "Saved! ✅"); 
+    document.getElementById("edAmt").value=""; document.getElementById("edDesc").value="";
+}
+
+function setupLongPress() {
+    let btn=document.getElementById("btnSave"); let timer;
+    btn.addEventListener("touchstart", ()=>{ timer=setTimeout(()=>{navigateTo('new-settings')},1000); });
+    btn.addEventListener("touchend", ()=>{ clearTimeout(timer); });
+    btn.addEventListener("mousedown", ()=>{ timer=setTimeout(()=>{navigateTo('new-settings')},1000); });
+    btn.addEventListener("mouseup", ()=>{ clearTimeout(timer); });
 }
 
 // =========================================
-// 6. ACCOUNTS & SETTINGS (Fixed Buttons)
+// 6. SETTINGS (ACCOUNTS & BACKUP)
 // =========================================
 function initSettingsScreen() {
     let c=document.getElementById("setSpinType"), d=document.getElementById("delSpinType"); c.innerHTML=""; d.innerHTML="";
     accTypes.forEach(t => { c.innerHTML+=`<option>${t}</option>`; d.innerHTML+=`<option>${t}</option>`; });
     updateDelList();
     let sc = localStorage.getItem("app_scale") || "10"; document.getElementById("fontSlider").value = sc; updateFontPreview(sc);
+
+    // Auto Backup Switch State
+    let isAutoBackup = localStorage.getItem("auto_backup_enabled") !== "false"; 
+    document.getElementById("autoBackupSwitch").checked = isAutoBackup;
 }
 
 // --- CREATE ACCOUNT (FIXED) ---
@@ -330,21 +318,116 @@ function deleteAccount() {
     if(!n) return;
     
     let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
-    // Check if account is used
     if(tr.some(x => x.dr_acc === n || x.cr_acc === n)) {
-        showAlert("Error", "Cannot delete! This account is used in transactions.");
+        showAlert("Error", "Cannot delete! Account used in transactions.");
         return;
     }
     
-    showAlert("Confirm", "Are you sure you want to delete '" + n + "'?", true, function() {
+    showAlert("Confirm", "Delete '" + n + "'?", true, function() {
         let all = JSON.parse(localStorage.getItem("accounts") || "{}");
         all[t] = all[t].filter(x => x !== n);
         localStorage.setItem("accounts", JSON.stringify(all));
-        showAlert("Success", "Account Deleted!");
+        showAlert("Success", "Deleted!");
         updateDelList();
     });
 }
 
+function toggleAutoBackup() {
+    let isEnabled = document.getElementById("autoBackupSwitch").checked;
+    localStorage.setItem("auto_backup_enabled", isEnabled);
+    showAlert("Settings", isEnabled ? "Auto Backup Enabled! ✅" : "Auto Backup Disabled! ❌");
+}
+
+// =========================================
+// 7. BACKUP & CLOUD LOGIC
+// =========================================
+function initFirebaseAndBackup() { 
+    let u=auth.currentUser; 
+    if(u) performCloudBackup(u.uid); 
+    else document.getElementById("loginModal").style.display="flex"; 
+}
+
+function firebaseLogin() { 
+    auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
+    .then(u => { 
+        document.getElementById("loginModal").style.display = "none"; 
+        showAlert("Success", "Logged In!"); 
+        if(localStorage.getItem("auto_backup_enabled") !== "false") performCloudBackup(u.user.uid);
+    }).catch(e => showAlert("Error", e.message)); 
+}
+
+function firebaseRegister() { 
+    auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
+    .then(u => { 
+        document.getElementById("loginModal").style.display = "none"; 
+        showAlert("Success", "Registered!"); 
+        if(localStorage.getItem("auto_backup_enabled") !== "false") performCloudBackup(u.user.uid);
+    }).catch(e => showAlert("Error", e.message)); 
+}
+
+function performCloudBackup(uid) {
+    let data = { transactions: localStorage.getItem("transactions") || "[]", accounts: localStorage.getItem("accounts") || "{}", hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" };
+    let ts = Date.now();
+    db.ref('users/' + uid + '/backups').push({ data: JSON.stringify(data), timestamp: ts, date_label: new Date().toLocaleString() })
+    .then(() => {
+        // Limit backups to 5
+        db.ref('users/' + uid + '/backups').once('value').then(snap => {
+            if(snap.numChildren() > 5) { let k=Object.keys(snap.val()); db.ref('users/'+uid+'/backups/'+k[0]).remove(); }
+        });
+        showAlert("Success", "Backup Complete! ☁");
+    });
+}
+
+function restoreFromCloud() {
+    let u = auth.currentUser;
+    if (!u) { showAlert("Error","Please Login first!"); return; }
+    document.getElementById("restoreModal").style.display = "flex";
+    const listDiv = document.getElementById("restoreList");
+    listDiv.innerHTML = "Loading...";
+
+    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(5).once('value')
+    .then(snapshot => {
+        listDiv.innerHTML = "";
+        snapshot.forEach(child => { 
+            let val = child.val();
+            let btn = document.createElement("button"); btn.className = "action-btn btn-indigo"; btn.style.marginBottom="5px";
+            btn.innerText = "📅 " + (val.date_label || new Date(val.timestamp).toLocaleString());
+            btn.onclick = () => confirmRestore(val.data);
+            listDiv.prepend(btn);
+        });
+    });
+}
+
+function confirmRestore(rawData) {
+    showAlert("Confirm", "Restore this backup?", true, function() {
+        try {
+            let d = (typeof rawData === 'string') ? JSON.parse(rawData) : rawData;
+            if(typeof d === 'string') d = JSON.parse(d); 
+            localStorage.setItem("transactions", d.transactions);
+            localStorage.setItem("accounts", d.accounts);
+            if(d.hidden_accounts) localStorage.setItem("hidden_accounts", d.hidden_accounts);
+            fixDataIntegrity();
+            showAlert("Success", "Restored! Reloading...");
+            setTimeout(() => location.reload(), 2000);
+        } catch(e) { showAlert("Error", "Restore Failed!"); }
+    });
+}
+
+function downloadBackup() {
+    let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
+    let b=new Blob([JSON.stringify(d)],{type:"application/json"});
+    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="MyLedger_Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function restoreBackup(i) {
+    let f=i.files[0]; if(!f) return; let r=new FileReader();
+    r.onload=e=>{ try{ confirmRestore(e.target.result); }catch(x){showAlert("Error","Invalid File!");} };
+    r.readAsText(f);
+}
+
+// =========================================
+// 8. ACCOUNTS VIEW & LOGIC
+// =========================================
 function initAccountScreen() {
     let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
     accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
@@ -356,16 +439,19 @@ function updateAccountFilterList() {
     let all=JSON.parse(localStorage.getItem("accounts")||"{}"), h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
     if(all[t]) all[t].forEach(n=>{ if(!h.includes(n)) s.innerHTML+=`<option>${n}</option>`; });
 }
+
 function showAccountDetails() {
     let ac=document.getElementById("accSelect").value, yr=document.getElementById("yearSelect").value, mo=document.getElementById("monthSelect").value;
     let type=document.getElementById("accTypeSelect").value;
     let monthlyMode = document.getElementById("accModeSwitch").checked;
+    
     if(!ac) return; 
     document.getElementById("tAccTitle").innerText = ac + (monthlyMode ? " (Monthly Mode)" : "");
     let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
     let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
     let td=0, tc=0, ob=0;
     
+    // B/F Logic
     let isNominal = (type === "ආදායම්" || type === "වියදම්");
     if (monthlyMode && isNominal) { ob = 0; } 
     else {
@@ -388,17 +474,22 @@ function showAccountDetails() {
             ob -= retained;
         }
     }
+
     if(ob!=0) { 
-        let d=document.createElement("div"); d.className="t-item t-bf"; d.innerText="B/F : "+Math.abs(ob).toFixed(2); 
+        let d=document.createElement("div"); d.className="t-item t-bf"; 
+        d.innerText="B/F : "+Math.abs(ob).toFixed(2); 
         if(ob>0){dr.appendChild(d); td+=ob;} else{cr.appendChild(d); tc+=Math.abs(ob);} 
     }
+
     tr.forEach(x=>{ 
         if(x.year==yr && x.month==mo) { 
-            let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; d.onclick=()=>showAlert("Details", x.desc); 
+            let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; 
+            d.onclick=()=>showAlert("Details", x.desc); 
             if(x.dr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a; }
             else if(x.cr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a; } 
         } 
     });
+
     document.getElementById("drTotal").innerText=td.toFixed(2); document.getElementById("crTotal").innerText=tc.toFixed(2);
     let b=td-tc, bb=document.getElementById("finalBalanceBox"); 
     bb.innerText="Balance c/d: "+Math.abs(b).toFixed(2) + (b>=0?" (Dr)":" (Cr)");
@@ -406,7 +497,7 @@ function showAccountDetails() {
 }
 
 // =========================================
-// 7. FULL REPORT GENERATION
+// 9. FULL REPORT (SUMMARY)
 // =========================================
 function initReportsScreen() {
     let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
@@ -582,7 +673,7 @@ function generateReport() {
 }
 
 // =========================================
-// 8. CHARTS (ALL 22 CHARTS)
+// 10. CHARTS & OTHER
 // =========================================
 function loadCharts() {
     let mode = parseInt(document.getElementById("chartModeSelect").value);
@@ -624,21 +715,28 @@ function loadCharts() {
         new Chart(document.getElementById(id), { type: type, data: data, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } });
     };
 
-    // 1. Overview
     createChart("c1", "pie", "Income vs Expense", { labels: ['Income','Expense'], datasets: [{ data: [totInc, totExp], backgroundColor: ['#4CAF50','#F44336'] }] });
-    // 2. Net Trend
     createChart("c2", "line", "Net Balance Trend", { labels: labels, datasets: [{ label: 'Net', data: trendNet, borderColor: '#673AB7', fill: true }] });
-    // 3. Top Expenses
     createChart("c3", "bar", "Top Expenses", { labels: Object.keys(mapExp), datasets: [{ label: 'Expense', data: Object.values(mapExp), backgroundColor: '#F44336' }] });
-    // 4. Assets/Liab
     createChart("c4", "doughnut", "Assets vs Liabilities", { labels: ['Assets','Liabilities'], datasets: [{ data: [totAsset, totLiab], backgroundColor: ['#2196F3','#FFC107'] }] });
     
     document.getElementById("chartTitle").innerText = "Displaying Key Financial Charts";
 }
 
-// =========================================
-// 9. OTHER SETTINGS (BACKUP ETC)
-// =========================================
+function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
+function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
+function showAlert(title, message, isConfirm = false, onYes = null) {
+    const modal = document.getElementById("customAlert");
+    document.getElementById("alertTitle").innerText = title; document.getElementById("alertMessage").innerText = message;
+    const btnOk = document.getElementById("btnAlertOk"); const btnCancel = document.getElementById("btnAlertCancel");
+    if (isConfirm) { btnCancel.style.display = "block"; btnOk.innerText = "Yes"; btnOk.onclick = function() { modal.style.display = "none"; if (onYes) onYes(); }; } 
+    else { btnCancel.style.display = "none"; btnOk.innerText = "OK"; btnOk.onclick = () => modal.style.display = "none"; }
+    modal.style.display = "flex";
+}
+function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
+function printReport() { alert("Print PDF is optimized for Android App. On web, use browser Print (Ctrl+P)."); }
+
+// Advanced Settings Helpers
 function initNewSettingsScreen() { renderTodayTransactions(); }
 function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
 function filterHideList() {
@@ -677,79 +775,5 @@ function deleteTransaction(idx) {
         tr.splice(idx,1);
         localStorage.setItem("transactions", JSON.stringify(tr)); 
         renderTodayTransactions(); showAlert("Success","Deleted!");
-    });
-}
-function downloadBackup() {
-    let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
-    let b=new Blob([JSON.stringify(d)],{type:"application/json"});
-    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-}
-function restoreBackup(i) {
-    let f=i.files[0]; if(!f) return; let r=new FileReader();
-    r.onload=e=>{ try{ confirmRestore(e.target.result); }catch(x){showAlert("Error","Invalid File!");} };
-    r.readAsText(f);
-}
-function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
-function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
-function showAlert(title, message, isConfirm = false, onYes = null) {
-    const modal = document.getElementById("customAlert");
-    document.getElementById("alertTitle").innerText = title; document.getElementById("alertMessage").innerText = message;
-    const btnOk = document.getElementById("btnAlertOk"); const btnCancel = document.getElementById("btnAlertCancel");
-    if (isConfirm) { btnCancel.style.display = "block"; btnOk.innerText = "Yes"; btnOk.onclick = function() { modal.style.display = "none"; if (onYes) onYes(); }; } 
-    else { btnCancel.style.display = "none"; btnOk.innerText = "OK"; btnOk.onclick = () => modal.style.display = "none"; }
-    modal.style.display = "flex";
-}
-function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
-function printReport() { alert("Print PDF is optimized for Android App. On web, use browser Print (Ctrl+P)."); }
-function initFirebaseAndBackup() { let u=auth.currentUser; if(u) performCloudBackup(u.uid); else document.getElementById("loginModal").style.display="flex"; }
-function firebaseLogin() { 
-    auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
-    .then(u => { document.getElementById("loginModal").style.display = "none"; showAlert("Success", "Logged In!"); performCloudBackup(u.user.uid); })
-    .catch(e => showAlert("Error", e.message)); 
-}
-function firebaseRegister() { 
-    auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
-    .then(u => { document.getElementById("loginModal").style.display = "none"; showAlert("Success", "Registered!"); performCloudBackup(u.user.uid); })
-    .catch(e => showAlert("Error", e.message)); 
-}
-function performCloudBackup(uid) {
-    let data = { transactions: localStorage.getItem("transactions") || "[]", accounts: localStorage.getItem("accounts") || "{}", hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" };
-    let ts = Date.now();
-    db.ref('users/' + uid + '/backups').push({ data: JSON.stringify(data), timestamp: ts, date_label: new Date().toLocaleString() })
-    .then(() => showAlert("Success", "Auto Backup Complete! ☁"));
-}
-function restoreFromCloud() {
-    let u = auth.currentUser;
-    if (!u) { showAlert("Error","Please Login first!"); return; }
-    document.getElementById("restoreModal").style.display = "flex";
-    const listDiv = document.getElementById("restoreList");
-    listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
-    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value')
-    .then(snapshot => {
-        listDiv.innerHTML = "";
-        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
-        let backups = [];
-        snapshot.forEach(child => { backups.unshift(child.val()); });
-        backups.forEach(val => {
-            let btn = document.createElement("button"); btn.className = "action-btn btn-indigo"; btn.style.marginBottom = "10px";
-            let dateLabel = val.date_label || new Date(val.timestamp).toLocaleString();
-            btn.innerText = "📅 " + dateLabel;
-            btn.onclick = () => confirmRestore(val.data);
-            listDiv.appendChild(btn);
-        });
-    });
-}
-function confirmRestore(rawData) {
-    showAlert("Confirm", "Restore this backup?", true, function() {
-        try {
-            let finalData = (typeof rawData === 'string') ? JSON.parse(rawData) : rawData;
-            if (typeof finalData === 'string') { try { finalData = JSON.parse(finalData); } catch(e) {} }
-            if (finalData.transactions) localStorage.setItem("transactions", finalData.transactions);
-            if (finalData.accounts) localStorage.setItem("accounts", finalData.accounts);
-            if (finalData.hidden_accounts) localStorage.setItem("hidden_accounts", finalData.hidden_accounts);
-            fixDataIntegrity();
-            showAlert("Success", "Restored Successfully! Reloading...");
-            setTimeout(() => location.reload(), 2000);
-        } catch(e) { showAlert("Error", "Restore Failed!"); }
     });
 }
