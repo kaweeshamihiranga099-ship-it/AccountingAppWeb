@@ -434,29 +434,70 @@ function performCloudBackup(uid) {
 
 function restoreFromCloud() {
     let u = auth.currentUser;
-    if (!u) { showAlert("Error","Please Login first!"); return; }
+    if (!u) { showAlert("Error", "Please Login first!"); return; }
+    
     document.getElementById("restoreModal").style.display = "flex";
     const listDiv = document.getElementById("restoreList");
-    listDiv.innerHTML = "Loading...";
+    listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
 
-    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value')
+    // Query එක සරල කළා (orderByChild ඉවත් කළා - දෝෂ මගහරවා ගැනීමට)
+    db.ref('users/' + u.uid + '/backups').limitToLast(15).once('value')
     .then(snapshot => {
         listDiv.innerHTML = "";
-        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
         
-        // Convert to array to reverse (newest first)
+        if (!snapshot.exists()) { 
+            listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; 
+            return; 
+        }
+        
+        // දත්ත Array එකකට ගැනීම (අලුත් ඒවා උඩට එන ලෙස Reverse කිරීම)
         let backups = [];
-        snapshot.forEach(child => backups.unshift(child.val()));
+        snapshot.forEach(child => { 
+            backups.unshift({ key: child.key, val: child.val() }); 
+        });
         
-        backups.forEach(val => {
+        backups.forEach(item => {
+            let val = item.val;
             let btn = document.createElement("button"); 
-            btn.className = "action-btn btn-indigo"; btn.style.marginBottom="5px";
-            // Use the fixed date_label or fallback to timestamp
-            let label = val.date_label || new Date(val.timestamp).toLocaleString();
-            btn.innerText = "📅 " + label;
+            btn.className = "action-btn btn-indigo"; 
+            btn.style.marginBottom = "8px";
+            btn.style.textAlign = "left"; // අකුරු වම් පැත්තට
+
+            // --- 🛠️ දිනය සොයා ගැනීමේ Logic එක (ROBUST DATE FINDER) ---
+            let displayLabel = "📅 Unknown Date";
+
+            if (val.date_label) {
+                // 1. Web/App එකෙන් එන සම්මත නම
+                displayLabel = "📅 " + val.date_label;
+            } 
+            else if (val.date) {
+                // 2. සමහර පැරණි සංස්කරණ වල 'date' ලෙස තිබිය හැක
+                displayLabel = "📅 " + val.date;
+            } 
+            else if (val.timestamp) {
+                // 3. නමක් නැත්නම් Timestamp එක දිනයක් බවට හරවන්න
+                try {
+                    let d = new Date(val.timestamp);
+                    displayLabel = "📅 " + d.toLocaleDateString() + " " + d.toLocaleTimeString();
+                } catch (e) { 
+                    displayLabel = "📅 Time Error"; 
+                }
+            } 
+            else {
+                // 4. කිසිවක් නැත්නම් Key එකෙන් කොටසක් පෙන්වන්න
+                displayLabel = "📅 Backup ID: " + item.key.substring(0, 6);
+            }
+
+            btn.innerText = displayLabel;
+            
+            // Backup එක Click කළාම Restore වෙන්න
             btn.onclick = () => confirmRestore(val.data);
+            
             listDiv.appendChild(btn);
         });
+    })
+    .catch(error => {
+        listDiv.innerHTML = "<p style='color:red; text-align:center'>Error: " + error.message + "</p>";
     });
 }
 
