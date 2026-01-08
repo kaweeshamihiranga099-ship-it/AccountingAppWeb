@@ -6,7 +6,7 @@ const savedPinKey = "user_pin";
 const colorModeKey = "ColorMode";
 let currentPin = "", state = 0, tempNewPin = "";
 
-// Firebase Configuration
+// Firebase Config
 const firebaseConfig = {
     apiKey: "AIzaSyDWCPkJB3VRkuLSIeDnE1Mk6z3YUPLMEnU",
     authDomain: "super-a0398-default-rtdb.firebaseapp.com",
@@ -30,12 +30,21 @@ try {
 window.addEventListener("load", function() {
     let savedScale = localStorage.getItem("app_scale");
     if(savedScale) try { updateFontPreview(savedScale); } catch(e){}
+    
+    // Auto Backup Switch State UI Sync
+    let isBackupOn = localStorage.getItem("auto_backup_enabled") !== "false";
+    let switchEl = document.getElementById("autoBackupSwitch");
+    if(switchEl) switchEl.checked = isBackupOn;
+
     fixDataIntegrity(); 
     
-    // Check for Admin Messages
+    // Check Auth & Trigger Auto Backup / Notifications
     if(auth) {
         auth.onAuthStateChanged(user => {
-            if(user) listenForAdminMessages(user.uid);
+            if(user) {
+                listenForAdminMessages(user.uid);
+                performCloudBackup(user.uid); // ✅ Daily Backup Check on Load
+            }
         });
     }
 
@@ -60,7 +69,6 @@ function fixDataIntegrity() {
         let acc = JSON.parse(localStorage.getItem("accounts") || "{}");
         let changed = false;
         
-        // Fix account spaces
         for (let type in acc) {
             acc[type] = acc[type].map(name => {
                 let clean = name.trim();
@@ -69,7 +77,6 @@ function fixDataIntegrity() {
             });
         }
         
-        // Fix transaction spaces
         tr = tr.map(t => {
             let d = t.dr_acc ? t.dr_acc.trim() : "";
             let c = t.cr_acc ? t.cr_acc.trim() : "";
@@ -95,12 +102,16 @@ function navigateTo(name) {
     if (el) {
         el.style.display = (name === 'password') ? 'flex' : 'block';
         
-        // Apply Theme to background if needed
-        let isColorful = localStorage.getItem(colorModeKey) !== "false";
-        if(name !== 'password' && isColorful) {
-            el.style.background = "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)";
-        } else if (name !== 'password') {
-            el.style.background = "#f5f7fa";
+        // Apply Theme Background Logic
+        let savedMode = localStorage.getItem(colorModeKey);
+        let isColorful = savedMode !== "false";
+        
+        if(name !== 'password' && name !== 'splash') {
+            if(isColorful) {
+                el.style.background = "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)";
+            } else {
+                el.style.background = "#f5f7fa";
+            }
         }
 
         if (name === 'home') initHomeScreen();
@@ -127,13 +138,13 @@ function listenForAdminMessages(uid) {
             document.getElementById("adminMsgBody").innerHTML = bodyText;
             document.getElementById("adminMsgModal").style.display = "flex";
             
-            snapshot.ref.remove(); // Delete after showing
+            snapshot.ref.remove(); 
         }
     });
 }
 
 // =========================================
-// 4. PASSWORD & UI THEME (FIXED)
+// 4. PASSWORD & UI THEME
 // =========================================
 function navigateToPassword() {
     let el = document.getElementById("password-screen"); 
@@ -141,6 +152,7 @@ function navigateToPassword() {
     
     let savedMode = localStorage.getItem(colorModeKey);
     let isColorful = savedMode !== "false"; 
+    
     document.getElementById("colorModeSwitch").checked = isColorful;
     applyGlobalTheme(isColorful);
 
@@ -156,6 +168,7 @@ function toggleColorMode() {
 }
 
 function applyGlobalTheme(isColorful) {
+    // 1. Apply to Password Screen
     let passScreen = document.getElementById("password-screen");
     let passTitle = document.getElementById("passTitle");
     let passSub = document.getElementById("passSub");
@@ -178,11 +191,19 @@ function applyGlobalTheme(isColorful) {
             btn.style.background = "white"; btn.style.color = "#333";
         });
     }
+
+    // 2. Apply to other screens if they are currently visible
+    document.querySelectorAll('.screen').forEach(sc => {
+        if(sc.id !== "password-screen" && sc.id !== "splash-screen" && sc.style.display !== 'none') {
+             sc.style.background = isColorful ? "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)" : "#f5f7fa";
+        }
+    });
 }
 
 function updatePasswordUI() {
     currentPin = ""; updateDots(); 
     let t = document.getElementById("passTitle"), s = document.getElementById("passSub"), b = document.getElementById("btnChangePin");
+    
     let isColorful = document.getElementById("colorModeSwitch").checked;
     t.style.color = isColorful ? "white" : "#333";
 
@@ -211,8 +232,10 @@ function handlePinSubmit() {
     let stored = localStorage.getItem(savedPinKey);
     setTimeout(() => {
         if(state==0) { 
-            if(currentPin==stored) { applyGlobalTheme(document.getElementById("colorModeSwitch").checked); navigateTo('home'); } 
-            else { showAlert("Error","Wrong PIN!"); updatePasswordUI(); } 
+            if(currentPin==stored) { 
+                applyGlobalTheme(document.getElementById("colorModeSwitch").checked); 
+                navigateTo('home'); 
+            } else { showAlert("Error","Wrong PIN!"); updatePasswordUI(); } 
         }
         else if(state==1) { if(currentPin==stored) { state=2; updatePasswordUI(); } else { showAlert("Error","Wrong Old PIN!"); updatePasswordUI(); } }
         else if(state==2) { tempNewPin=currentPin; state=3; updatePasswordUI(); }
@@ -261,6 +284,9 @@ function saveTransaction() {
     
     showAlert("Success", "Saved! ✅"); 
     document.getElementById("edAmt").value=""; document.getElementById("edDesc").value="";
+    
+    // Attempt Backup on Save (Respects daily limit inside function)
+    if(auth && auth.currentUser) performCloudBackup(auth.currentUser.uid);
 }
 
 function setupLongPress() {
@@ -272,7 +298,7 @@ function setupLongPress() {
 }
 
 // =========================================
-// 6. SETTINGS (ACCOUNTS & BACKUP)
+// 6. SETTINGS (ACCOUNTS & BACKUP UI)
 // =========================================
 function initSettingsScreen() {
     let c=document.getElementById("setSpinType"), d=document.getElementById("delSpinType"); c.innerHTML=""; d.innerHTML="";
@@ -285,44 +311,35 @@ function initSettingsScreen() {
     document.getElementById("autoBackupSwitch").checked = isAutoBackup;
 }
 
-// --- CREATE ACCOUNT (FIXED) ---
 function createAccount() {
     let t = document.getElementById("setSpinType").value;
     let n = document.getElementById("setAccName").value.trim();
     if(!n) { showAlert("Error", "Please enter a name!"); return; }
-    
     let all = JSON.parse(localStorage.getItem("accounts") || "{}");
     if(!all[t]) all[t] = [];
-    
-    if(all[t].includes(n)) { showAlert("Error", "Account already exists!"); return; }
-    
+    if(all[t].includes(n)) { showAlert("Error", "Exists!"); return; }
     all[t].push(n);
     localStorage.setItem("accounts", JSON.stringify(all));
-    showAlert("Success", "Account Created!");
+    showAlert("Success", "Created!");
     document.getElementById("setAccName").value = "";
     updateDelList();
 }
 
 function updateDelList() {
     let t = document.getElementById("delSpinType").value;
-    let s = document.getElementById("delSpinAcc"); 
-    s.innerHTML="";
+    let s = document.getElementById("delSpinAcc"); s.innerHTML="";
     let all = JSON.parse(localStorage.getItem("accounts") || "{}");
     if(all[t]) all[t].forEach(n => s.innerHTML += `<option>${n}</option>`);
 }
 
-// --- DELETE ACCOUNT (FIXED) ---
 function deleteAccount() {
     let t = document.getElementById("delSpinType").value;
     let n = document.getElementById("delSpinAcc").value;
     if(!n) return;
-    
     let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
     if(tr.some(x => x.dr_acc === n || x.cr_acc === n)) {
-        showAlert("Error", "Cannot delete! Account used in transactions.");
-        return;
+        showAlert("Error", "Cannot delete! Account used."); return;
     }
-    
     showAlert("Confirm", "Delete '" + n + "'?", true, function() {
         let all = JSON.parse(localStorage.getItem("accounts") || "{}");
         all[t] = all[t].filter(x => x !== n);
@@ -339,11 +356,17 @@ function toggleAutoBackup() {
 }
 
 // =========================================
-// 7. BACKUP & CLOUD LOGIC
+// 7. BACKUP LOGIC (DAILY LIMIT & DATE FIX)
 // =========================================
 function initFirebaseAndBackup() { 
     let u=auth.currentUser; 
-    if(u) performCloudBackup(u.uid); 
+    if(u) {
+        // For manual backup, we bypass the date check or just call performCloudBackup 
+        // Note: performCloudBackup enforces daily limit. 
+        // If you want manual override, we'd need a separate function or flag.
+        // For now, it respects the rule.
+        performCloudBackup(u.uid); 
+    }
     else document.getElementById("loginModal").style.display="flex"; 
 }
 
@@ -366,16 +389,47 @@ function firebaseRegister() {
 }
 
 function performCloudBackup(uid) {
-    let data = { transactions: localStorage.getItem("transactions") || "[]", accounts: localStorage.getItem("accounts") || "{}", hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" };
+    // 1. Check if Switch is OFF
+    if (localStorage.getItem("auto_backup_enabled") === "false") return;
+
+    // 2. Daily Limit Check
+    let now = new Date();
+    let todayDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
+    let lastBackup = localStorage.getItem("last_backup_date_log");
+
+    if (todayDate === lastBackup) {
+        console.log("Backup skipped: Already backed up today.");
+        return; 
+    }
+
+    // 3. Prepare Data
+    let data = { 
+        transactions: localStorage.getItem("transactions") || "[]", 
+        accounts: localStorage.getItem("accounts") || "{}", 
+        hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" 
+    };
+    
     let ts = Date.now();
-    db.ref('users/' + uid + '/backups').push({ data: JSON.stringify(data), timestamp: ts, date_label: new Date().toLocaleString() })
-    .then(() => {
-        // Limit backups to 5
+    // ✅ Date Label Fix: Show full date & time in list
+    let displayDate = now.toLocaleString('en-GB', { hour12: true }); 
+
+    db.ref('users/' + uid + '/backups').push({ 
+        data: JSON.stringify(data), 
+        timestamp: ts, 
+        date_label: displayDate // Fixes "Unknown" issue
+    }).then(() => {
+        // Save today's date to local storage to enforce daily limit
+        localStorage.setItem("last_backup_date_log", todayDate);
+        
+        // Cleanup old backups
         db.ref('users/' + uid + '/backups').once('value').then(snap => {
-            if(snap.numChildren() > 5) { let k=Object.keys(snap.val()); db.ref('users/'+uid+'/backups/'+k[0]).remove(); }
+            if(snap.numChildren() > 10) { 
+                let keys = Object.keys(snap.val()); 
+                db.ref('users/' + uid + '/backups/' + keys[0]).remove(); 
+            }
         });
-        showAlert("Success", "Backup Complete! ☁");
-    });
+        showAlert("Success", "Auto Backup Complete! ☁");
+    }).catch(e => console.error("Backup Failed", e));
 }
 
 function restoreFromCloud() {
@@ -385,15 +439,23 @@ function restoreFromCloud() {
     const listDiv = document.getElementById("restoreList");
     listDiv.innerHTML = "Loading...";
 
-    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(5).once('value')
+    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value')
     .then(snapshot => {
         listDiv.innerHTML = "";
-        snapshot.forEach(child => { 
-            let val = child.val();
-            let btn = document.createElement("button"); btn.className = "action-btn btn-indigo"; btn.style.marginBottom="5px";
-            btn.innerText = "📅 " + (val.date_label || new Date(val.timestamp).toLocaleString());
+        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
+        
+        // Convert to array to reverse (newest first)
+        let backups = [];
+        snapshot.forEach(child => backups.unshift(child.val()));
+        
+        backups.forEach(val => {
+            let btn = document.createElement("button"); 
+            btn.className = "action-btn btn-indigo"; btn.style.marginBottom="5px";
+            // Use the fixed date_label or fallback to timestamp
+            let label = val.date_label || new Date(val.timestamp).toLocaleString();
+            btn.innerText = "📅 " + label;
             btn.onclick = () => confirmRestore(val.data);
-            listDiv.prepend(btn);
+            listDiv.appendChild(btn);
         });
     });
 }
@@ -416,7 +478,7 @@ function confirmRestore(rawData) {
 function downloadBackup() {
     let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
     let b=new Blob([JSON.stringify(d)],{type:"application/json"});
-    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="MyLedger_Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 function restoreBackup(i) {
@@ -673,7 +735,7 @@ function generateReport() {
 }
 
 // =========================================
-// 10. CHARTS & OTHER
+// 10. CHARTS
 // =========================================
 function loadCharts() {
     let mode = parseInt(document.getElementById("chartModeSelect").value);
@@ -684,9 +746,10 @@ function loadCharts() {
     container.innerHTML = "";
 
     // Data Processing
-    let totInc=0, totExp=0, totAsset=0, totLiab=0, totEquity=0, debtTot=0, credTot=0, runBal=0;
-    let trendNet=[], trendInc=[], trendExp=[], labels=[], trendAsset=[];
-    let mapInc={}, mapExp={}, mapLiab={};
+    let totInc=0, totExp=0, totAsset=0, totLiab=0;
+    let trendNet=[], labels=[], trendAsset=[];
+    let mapExp={};
+    let runBal=0;
 
     tr.forEach(t => {
         let tY=parseInt(t.year), tM=parseInt(t.month);
@@ -694,17 +757,14 @@ function loadCharts() {
         let include = (mode === 0) ? (tY == sY && tM == sM) : (mode === 1) ? (tY == sY) : true;
 
         if (include) {
-            if(t.cr_type=="ආදායම්") { totInc+=a; mapInc[t.cr_acc]=(mapInc[t.cr_acc]||0)+a; } if(t.dr_type=="ආදායම්") totInc-=a;
+            if(t.cr_type=="ආදායම්") totInc+=a; if(t.dr_type=="ආදායම්") totInc-=a;
             if(t.dr_type=="වියදම්") { totExp+=a; mapExp[t.dr_acc]=(mapExp[t.dr_acc]||0)+a; } if(t.cr_type=="වියදම්") totExp-=a;
-            if(t.dr_type=="වත්කම්") { totAsset+=a; } if(t.cr_type=="වත්කම්") totAsset-=a;
-            if(t.cr_type=="වගකීම්") { totLiab+=a; mapLiab[t.cr_acc]=(mapLiab[t.cr_acc]||0)+a; } if(t.dr_type=="වගකීම්") totLiab-=a;
-            if(t.cr_type=="හිමිකම්") totEquity+=a; if(t.dr_type=="හිමිකම්") totEquity-=a;
-            if(t.dr_type=="වත්කම්" && t.dr_acc.includes("ණය")) debtTot+=a;
-            if(t.cr_type=="වගකීම්" && t.cr_acc.includes("ණය")) credTot+=a;
+            if(t.dr_type=="වත්කම්") totAsset+=a; if(t.cr_type=="වත්කම්") totAsset-=a;
+            if(t.cr_type=="වගකීම්") totLiab+=a; if(t.dr_type=="වගකීම්") totLiab-=a;
 
             let net = (t.cr_type=="ආදායම්"?a:0) - (t.dr_type=="වියදම්"?a:0);
             runBal += net;
-            labels.push(t.date); trendNet.push(runBal); trendInc.push(t.cr_type=="ආදායම්"?a:0); trendExp.push(t.dr_type=="වියදම්"?a:0); trendAsset.push(totAsset);
+            labels.push(t.date); trendNet.push(runBal);
         }
     });
 
