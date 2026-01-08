@@ -57,6 +57,7 @@ function fixDataIntegrity() {
         let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
         let acc = JSON.parse(localStorage.getItem("accounts") || "{}");
         let changed = false;
+        // Fix account spaces
         for (let type in acc) {
             acc[type] = acc[type].map(name => {
                 let clean = name.trim();
@@ -64,6 +65,7 @@ function fixDataIntegrity() {
                 return clean;
             });
         }
+        // Fix transaction spaces
         tr = tr.map(t => {
             let d = t.dr_acc ? t.dr_acc.trim() : "";
             let c = t.cr_acc ? t.cr_acc.trim() : "";
@@ -170,8 +172,63 @@ function saveTransaction() {
 }
 
 // =========================================
-// 6. ACCOUNTS VIEW
+// 6. ACCOUNTS & SETTINGS (Fixed Buttons)
 // =========================================
+function initSettingsScreen() {
+    let c=document.getElementById("setSpinType"), d=document.getElementById("delSpinType"); c.innerHTML=""; d.innerHTML="";
+    accTypes.forEach(t => { c.innerHTML+=`<option>${t}</option>`; d.innerHTML+=`<option>${t}</option>`; });
+    updateDelList();
+    let sc = localStorage.getItem("app_scale") || "10"; document.getElementById("fontSlider").value = sc; updateFontPreview(sc);
+}
+
+// --- CREATE ACCOUNT (FIXED) ---
+function createAccount() {
+    let t = document.getElementById("setSpinType").value;
+    let n = document.getElementById("setAccName").value.trim();
+    if(!n) { showAlert("Error", "Please enter a name!"); return; }
+    
+    let all = JSON.parse(localStorage.getItem("accounts") || "{}");
+    if(!all[t]) all[t] = [];
+    
+    if(all[t].includes(n)) { showAlert("Error", "Account already exists!"); return; }
+    
+    all[t].push(n);
+    localStorage.setItem("accounts", JSON.stringify(all));
+    showAlert("Success", "Account Created!");
+    document.getElementById("setAccName").value = "";
+    updateDelList();
+}
+
+function updateDelList() {
+    let t = document.getElementById("delSpinType").value;
+    let s = document.getElementById("delSpinAcc"); 
+    s.innerHTML="";
+    let all = JSON.parse(localStorage.getItem("accounts") || "{}");
+    if(all[t]) all[t].forEach(n => s.innerHTML += `<option>${n}</option>`);
+}
+
+// --- DELETE ACCOUNT (FIXED) ---
+function deleteAccount() {
+    let t = document.getElementById("delSpinType").value;
+    let n = document.getElementById("delSpinAcc").value;
+    if(!n) return;
+    
+    let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
+    // Check if account is used
+    if(tr.some(x => x.dr_acc === n || x.cr_acc === n)) {
+        showAlert("Error", "Cannot delete! This account is used in transactions.");
+        return;
+    }
+    
+    showAlert("Confirm", "Are you sure you want to delete '" + n + "'?", true, function() {
+        let all = JSON.parse(localStorage.getItem("accounts") || "{}");
+        all[t] = all[t].filter(x => x !== n);
+        localStorage.setItem("accounts", JSON.stringify(all));
+        showAlert("Success", "Account Deleted!");
+        updateDelList();
+    });
+}
+
 function initAccountScreen() {
     let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
     accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
@@ -193,7 +250,6 @@ function showAccountDetails() {
     let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
     let td=0, tc=0, ob=0;
     
-    // B/F Logic
     let isNominal = (type === "ආදායම්" || type === "වියදම්");
     if (monthlyMode && isNominal) { ob = 0; } 
     else {
@@ -234,7 +290,7 @@ function showAccountDetails() {
 }
 
 // =========================================
-// 7. FULL REPORT GENERATION (UPDATED FOR FULL DETAILS)
+// 7. FULL REPORT GENERATION
 // =========================================
 function initReportsScreen() {
     let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
@@ -251,7 +307,7 @@ function generateReport() {
     let accounts=JSON.parse(localStorage.getItem("accounts")||"{}");
     let hidden=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
     let periodStr = isYearly ? `Year: ${sY}` : `Month: ${sY}-${sM}`;
-    let primaryCapital = "Capital"; // Default capital account name
+    let primaryCapital = "Capital";
 
     let html = `<div style="text-align:center; margin-bottom:20px;"><h2>MY LEDGER - FULL REPORT</h2><p>${periodStr}</p></div><hr>`;
 
@@ -278,7 +334,6 @@ function generateReport() {
             }
         });
 
-        // Capital Adjustment
         if(acc === primaryCapital) {
             let ret = 0;
             tr.forEach(t => {
@@ -307,7 +362,6 @@ function generateReport() {
         let isNominal = (type === "ආදායම්" || type === "වියදම්");
         let openBal = 0;
 
-        // B/F Calculation
         if(!isNominal) {
             tr.forEach(t => {
                 let tY=parseInt(t.year), tM=parseInt(t.month);
@@ -338,7 +392,6 @@ function generateReport() {
             if (openBal > 0) { drHtml += bfRow; monthDr += openBal; } else { crHtml += bfRow; monthCr += Math.abs(openBal); }
         }
 
-        // Transactions List
         tr.forEach(t => {
             let tY=parseInt(t.year), tM=parseInt(t.month);
             let isCurrent = isYearly ? (tY == sY) : (tY == sY && tM == sM);
@@ -360,14 +413,12 @@ function generateReport() {
     let ta=0, tl=0, te=0, ti=0, tx=0;
     tr.forEach(t => {
         let tY=parseInt(t.year), tM=parseInt(t.month);
-        // Income/Expense (Period Only)
         let inPeriod = isYearly ? (tY == sY) : (tY == sY && tM == sM);
         if(inPeriod) {
             let a = parseFloat(t.amount);
             if(t.cr_type=="ආදායම්") ti+=a; if(t.dr_type=="ආදායම්") ti-=a;
             if(t.dr_type=="වියදම්") tx+=a; if(t.cr_type=="වියදම්") tx-=a;
         }
-        // Asset/Liab/Equity (Cumulative)
         let inCumulative = isYearly ? (tY <= sY) : (tY < sY || (tY == sY && tM <= sM));
         if(inCumulative) {
             let a = parseFloat(t.amount);
@@ -377,7 +428,6 @@ function generateReport() {
         }
     });
 
-    // Retained Profit for Equity Check
     let retainedProfit = 0;
     tr.forEach(t => {
         let tY=parseInt(t.year), tM=parseInt(t.month);
@@ -439,7 +489,7 @@ function loadCharts() {
         if (include) {
             if(t.cr_type=="ආදායම්") { totInc+=a; mapInc[t.cr_acc]=(mapInc[t.cr_acc]||0)+a; } if(t.dr_type=="ආදායම්") totInc-=a;
             if(t.dr_type=="වියදම්") { totExp+=a; mapExp[t.dr_acc]=(mapExp[t.dr_acc]||0)+a; } if(t.cr_type=="වියදම්") totExp-=a;
-            if(t.dr_type=="වත්කම්") totAsset+=a; if(t.cr_type=="වත්කම්") totAsset-=a;
+            if(t.dr_type=="වත්කම්") { totAsset+=a; } if(t.cr_type=="වත්කම්") totAsset-=a;
             if(t.cr_type=="වගකීම්") { totLiab+=a; mapLiab[t.cr_acc]=(mapLiab[t.cr_acc]||0)+a; } if(t.dr_type=="වගකීම්") totLiab-=a;
             if(t.cr_type=="හිමිකම්") totEquity+=a; if(t.dr_type=="හිමිකම්") totEquity-=a;
             if(t.dr_type=="වත්කම්" && t.dr_acc.includes("ණය")) debtTot+=a;
@@ -471,24 +521,58 @@ function loadCharts() {
 }
 
 // =========================================
-// 9. SETTINGS & OTHER (unchanged logic)
+// 9. OTHER SETTINGS (BACKUP ETC)
 // =========================================
-function initSettingsScreen() {
-    let c=document.getElementById("setSpinType"), d=document.getElementById("delSpinType"); c.innerHTML=""; d.innerHTML="";
-    accTypes.forEach(t => { c.innerHTML+=`<option>${t}</option>`; d.innerHTML+=`<option>${t}</option>`; });
-    updateDelList();
-}
-function createAccount() { /* (Same as before) */ }
-function deleteAccount() { /* (Same as before) */ }
-function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
-function filterHideList() { /* (Same as before) */ }
-function toggleHiddenAccount(cb) { /* (Same as before) */ }
-function saveHiddenAccounts() { document.getElementById("hideAccModal").style.display="none"; }
 function initNewSettingsScreen() { renderTodayTransactions(); }
-function renderTodayTransactions() { /* (Same as before) */ }
-function deleteTransaction(idx) { /* (Same as before) */ }
-function downloadBackup() { /* (Same as before) */ }
-function restoreBackup(i) { /* (Same as before) */ }
+function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
+function filterHideList() {
+    let s=document.getElementById("accSearch").value.toLowerCase(), l=document.getElementById("hideAccList"); l.innerHTML="";
+    let all=JSON.parse(localStorage.getItem("accounts")||"{}"), h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
+    let flat=[]; Object.keys(all).forEach(k=>all[k].forEach(a=>flat.push(a))); flat.sort();
+    flat.forEach(a=>{
+        if(a.toLowerCase().includes(s)) {
+            let i=document.createElement("div"); i.style.padding="10px"; i.style.borderBottom="1px solid #eee";
+            i.innerHTML=`<label style="display:flex;align-items:center;"><input type="checkbox" value="${a}" ${h.includes(a)?"checked":""} onchange="toggleHiddenAccount(this)"><span style="margin-left:10px;">${a}</span></label>`;
+            l.appendChild(i);
+        }
+    });
+}
+function toggleHiddenAccount(cb) {
+    let a=cb.value, h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
+    if(cb.checked) { if(!h.includes(a)) h.push(a); } else { h=h.filter(x=>x!==a); }
+    localStorage.setItem("hidden_accounts", JSON.stringify(h));
+}
+function saveHiddenAccounts() { showAlert("Success","Saved!"); document.getElementById("hideAccModal").style.display="none"; }
+function renderTodayTransactions() {
+    let l=document.getElementById("todayTransList"); l.innerHTML="";
+    let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
+    let today = getLocalTodayDate(); 
+    let list=tr.map((t,i)=>({...t,idx:i})).filter(t=>t.date===today);
+    if(list.length==0) { l.innerHTML="<p style='text-align:center;color:#999;'>No transactions today.</p>"; return; }
+    list.forEach(t=>{
+        let c=document.createElement("div"); c.style.cssText="background:white;padding:10px;margin-bottom:10px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);";
+        c.innerHTML=`<div style="display:flex;justify-content:space-between;font-weight:bold;"><span style="color:#006064;">${t.desc||"No Desc"}</span><span style="color:#004D40;">Rs. ${t.amount}</span></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:5px;"><span style="color:#D32F2F;">Dr: ${t.dr_acc}</span><span style="color:#388E3C;">Cr: ${t.cr_acc}</span></div><button onclick="deleteTransaction(${t.idx})" style="margin-top:5px;background:#FFEBEE;color:#D32F2F;border:none;padding:5px 10px;border-radius:4px;font-size:11px;">Delete 🗑️</button>`;
+        l.appendChild(c);
+    });
+}
+function deleteTransaction(idx) {
+    showAlert("Confirm", "Delete?", true, function() {
+        let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
+        tr.splice(idx,1);
+        localStorage.setItem("transactions", JSON.stringify(tr)); 
+        renderTodayTransactions(); showAlert("Success","Deleted!");
+    });
+}
+function downloadBackup() {
+    let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
+    let b=new Blob([JSON.stringify(d)],{type:"application/json"});
+    let a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="Backup.txt"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function restoreBackup(i) {
+    let f=i.files[0]; if(!f) return; let r=new FileReader();
+    r.onload=e=>{ try{ confirmRestore(e.target.result); }catch(x){showAlert("Error","Invalid File!");} };
+    r.readAsText(f);
+}
 function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
 function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
 function showAlert(title, message, isConfirm = false, onYes = null) {
@@ -518,5 +602,38 @@ function performCloudBackup(uid) {
     db.ref('users/' + uid + '/backups').push({ data: JSON.stringify(data), timestamp: ts, date_label: new Date().toLocaleString() })
     .then(() => showAlert("Success", "Auto Backup Complete! ☁"));
 }
-function restoreFromCloud() { /* (Same as before) */ }
-function confirmRestore(rawData) { /* (Same as before) */ }
+function restoreFromCloud() {
+    let u = auth.currentUser;
+    if (!u) { showAlert("Error","Please Login first!"); return; }
+    document.getElementById("restoreModal").style.display = "flex";
+    const listDiv = document.getElementById("restoreList");
+    listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
+    db.ref('users/' + u.uid + '/backups').orderByChild('timestamp').limitToLast(10).once('value')
+    .then(snapshot => {
+        listDiv.innerHTML = "";
+        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
+        let backups = [];
+        snapshot.forEach(child => { backups.unshift(child.val()); });
+        backups.forEach(val => {
+            let btn = document.createElement("button"); btn.className = "action-btn btn-indigo"; btn.style.marginBottom = "10px";
+            let dateLabel = val.date_label || new Date(val.timestamp).toLocaleString();
+            btn.innerText = "📅 " + dateLabel;
+            btn.onclick = () => confirmRestore(val.data);
+            listDiv.appendChild(btn);
+        });
+    });
+}
+function confirmRestore(rawData) {
+    showAlert("Confirm", "Restore this backup?", true, function() {
+        try {
+            let finalData = (typeof rawData === 'string') ? JSON.parse(rawData) : rawData;
+            if (typeof finalData === 'string') { try { finalData = JSON.parse(finalData); } catch(e) {} }
+            if (finalData.transactions) localStorage.setItem("transactions", finalData.transactions);
+            if (finalData.accounts) localStorage.setItem("accounts", finalData.accounts);
+            if (finalData.hidden_accounts) localStorage.setItem("hidden_accounts", finalData.hidden_accounts);
+            fixDataIntegrity();
+            showAlert("Success", "Restored Successfully! Reloading...");
+            setTimeout(() => location.reload(), 2000);
+        } catch(e) { showAlert("Error", "Restore Failed!"); }
+    });
+}
