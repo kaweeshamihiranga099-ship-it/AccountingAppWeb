@@ -29,7 +29,7 @@
 
     <div id="password-screen" class="screen" style="display: none;">
         <div class="switch-container">
-            <label class="switch-label">UI Color Mood</label>
+            <label class="switch-label">UI Color Mode</label>
             <label class="toggle-switch"><input type="checkbox" id="colorModeSwitch" checked onchange="toggleColorMode()"><span class="slider round"></span></label>
         </div>
         <div class="password-header"><h2 id="passTitle">Welcome Back</h2><p id="passSub">Enter your PIN to login</p></div>
@@ -99,6 +99,7 @@
     <div id="account-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
         <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
         <h2 style="text-align:center; margin: 10px 0;">Account View 📊</h2>
+        
         <div class="filters-box">
             <label>Type:</label><select id="accTypeSelect" class="form-select" onchange="updateAccountFilterList()"></select>
             <label>Account:</label><select id="accSelect" class="form-select"></select>
@@ -106,8 +107,18 @@
                 <div style="flex:1"><label>Year:</label><select id="yearSelect" class="form-select"></select></div>
                 <div style="flex:1"><label>Month:</label><select id="monthSelect" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div>
             </div>
-            <button class="action-btn btn-indigo" onclick="showAccountDetails()">Show Ledger</button>
+            
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; background:#e8eaf6; padding:5px; border-radius:5px;">
+                <span style="font-size:12px; color:#3F51B5; font-weight:bold;">Monthly Mode (Apply Rules)</span>
+                <label class="toggle-switch" style="transform: scale(0.8);">
+                    <input type="checkbox" id="accModeSwitch" onchange="showAccountDetails()">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+
+            <button class="action-btn btn-indigo" style="margin-top:10px;" onclick="showAccountDetails()">Show Ledger</button>
         </div>
+
         <h3 id="tAccTitle" style="text-align:center; margin-bottom: 5px;">- Select Account -</h3>
         <div class="t-account-container">
             <div class="t-header"><div class="t-col dr-col">Dr (හර)</div><div class="t-col cr-col">Cr (බැර)</div></div>
@@ -120,11 +131,21 @@
     <div id="reports-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
         <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
         <h2 style="text-align:center; margin: 10px 0;">Financial Reports 📈</h2>
+        
         <div class="filters-box">
             <div style="display: flex; gap: 10px;"><div style="flex:1"><label>Year:</label><select id="repYear" class="form-select"></select></div><div style="flex:1"><label>Month:</label><select id="repMonth" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div></div>
+            
+            <div style="display:flex; align-items:center; justify-content:space-between; margin:10px 0; background:#e0f2f1; padding:8px; border-radius:5px;">
+                <span style="font-size:13px; color:#00695C; font-weight:bold;">මුළු වර්ෂයටම (Yearly Report)</span>
+                <label class="toggle-switch" style="transform: scale(0.9);">
+                    <input type="checkbox" id="reportYearlySwitch">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+
             <button class="action-btn btn-green" onclick="generateReport()">Generate Summary</button>
             <div style="height: 5px;"></div>
-            <button class="action-btn btn-red" onclick="printReport()">🖨️ Print / Save as PDF❗(Not working for web version.only for Android application)</button>
+            <button class="action-btn btn-red" onclick="alert('PDF generation is fully supported in the Android App version!')">🖨️ Save as PDF (Android Only)</button>
             <div style="height: 5px;"></div>
             <button class="action-btn btn-indigo" onclick="navigateTo('charts')">📊 View Charts Analysis</button>
         </div>
@@ -133,7 +154,21 @@
 
     <div id="charts-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh; background: #eceff1;">
         <button class="back-btn" onclick="navigateTo('reports')" style="background: white; border: none; margin-bottom: 15px;">⬅ Back to Reports</button>
-        <div style="text-align:center; padding:15px; background:white; border-radius:10px; margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);"><h2 style="color:#444; margin:0;">FINANCIAL CHARTS</h2><p id="chartTitle" style="color:#888; margin:5px 0 0 0;">Loading...</p></div>
+        
+        <div style="text-align:center; padding:15px; background:white; border-radius:10px; margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+            <h2 style="color:#444; margin:0;">FINANCIAL ANALYSIS</h2>
+            
+            <div style="margin-top:10px;">
+                <label style="font-size:12px; color:#666;">Analysis Mode:</label>
+                <select id="chartModeSelect" class="form-select" style="margin-top:5px;" onchange="loadCharts()">
+                    <option value="0">Monthly Analysis</option>
+                    <option value="1">Yearly Analysis</option>
+                    <option value="2">All Time Analysis</option>
+                </select>
+            </div>
+            <p id="chartTitle" style="color:#888; margin:5px 0 0 0; font-size:12px;">Loading 22 Charts...</p>
+        </div>
+        
         <div id="chartsContainer"></div>
     </div>
 
@@ -144,6 +179,16 @@
             <div class="modal-buttons">
                 <button id="btnAlertCancel" class="action-btn btn-red" onclick="closeCustomAlert()" style="display:none;">Cancel</button>
                 <button id="btnAlertOk" class="action-btn btn-blue" onclick="closeCustomAlert()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminMsgModal" class="modal-overlay" style="display: none; z-index: 3000;">
+        <div class="modal-box" style="border-top: 5px solid #FF9800;">
+            <h3 id="adminMsgTitle" style="color:#E65100; margin-top:0;">📢 Admin Message</h3>
+            <div id="adminMsgBody" style="font-size:14px; line-height:1.5; color:#333; margin:10px 0; max-height:200px; overflow-y:auto;"></div>
+            <div class="modal-buttons">
+                <button class="action-btn btn-blue" onclick="document.getElementById('adminMsgModal').style.display='none'">Got it</button>
             </div>
         </div>
     </div>
@@ -188,4 +233,3 @@
     </script>
 </body>
 </html>
-
