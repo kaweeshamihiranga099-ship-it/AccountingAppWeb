@@ -81,7 +81,25 @@
         
         <div class="settings-card" style="background-color: #E0F7FA; border: 1px solid #006064;"><h3>3. Advanced Management</h3><p style="font-size: 12px; color: #006064; margin-bottom: 10px;">Manage Active Accounts & Edit Today's Entries</p><button class="action-btn" style="background-color: #0097A7;" onclick="navigateTo('new-settings')">📂 Open Advanced Settings</button></div>
         
-        <div class="settings-card"><h3>4. Backup & Restore</h3><button class="action-btn btn-cyan" onclick="initFirebaseAndBackup()">☁ Backup to Cloud</button><div style="height:5px"></div><button class="action-btn btn-orange" onclick="restoreFromCloud()">☁ Restore from Cloud</button><div style="height:10px"></div><button class="action-btn btn-green" onclick="downloadBackup()">📥 Local Backup</button><div style="height:5px"></div><label for="fileInput" class="action-btn btn-indigo" style="display:block; text-align:center; cursor:pointer;">📤 Restore Local File</label><input type="file" id="fileInput" accept=".txt,.json" style="display:none" onchange="restoreBackup(this)"><p id="backupStatus" style="text-align:center; font-size:12px; margin-top:5px; color:#555;">Status: Ready</p></div>
+        <div class="settings-card">
+            <h3>4. Backup & Restore</h3>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; background:#E0F2F1; padding:8px; border-radius:5px; border:1px solid #B2DFDB;">
+                <span style="font-size:13px; color:#00695C; font-weight:bold;">Auto Backup (On Login)</span>
+                <label class="toggle-switch" style="transform: scale(0.9);">
+                    <input type="checkbox" id="autoBackupSwitch" onchange="toggleAutoBackup()">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <button class="action-btn btn-cyan" onclick="initFirebaseAndBackup()">☁ Backup Now (Manual)</button>
+            <div style="height:5px"></div>
+            <button class="action-btn btn-orange" onclick="restoreFromCloud()">☁ Restore from Cloud</button>
+            <div style="height:10px"></div>
+            <button class="action-btn btn-green" onclick="downloadBackup()">📥 Local Backup</button>
+            <div style="height:5px"></div>
+            <label for="fileInput" class="action-btn btn-indigo" style="display:block; text-align:center; cursor:pointer;">📤 Restore Local File</label>
+            <input type="file" id="fileInput" accept=".txt,.json" style="display:none" onchange="restoreBackup(this)">
+            <p id="backupStatus" style="text-align:center; font-size:12px; margin-top:5px; color:#555;">Status: Ready</p>
+        </div>
         
         <div class="settings-card"><h3>5. Adjust Font Size</h3><p id="fontStatus" style="font-size:12px; text-align:center; margin-bottom:5px;">Current Scale: 1.0x</p><input type="range" id="fontSlider" min="5" max="15" value="10" style="width:100%;" oninput="updateFontPreview(this.value)"><button class="action-btn btn-purple" onclick="saveFontSettings()">Save Font Size</button></div>
         
@@ -107,7 +125,6 @@
                 <div style="flex:1"><label>Year:</label><select id="yearSelect" class="form-select"></select></div>
                 <div style="flex:1"><label>Month:</label><select id="monthSelect" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div>
             </div>
-            
             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; background:#e8eaf6; padding:5px; border-radius:5px;">
                 <span style="font-size:12px; color:#3F51B5; font-weight:bold;">Monthly Mode (Apply Rules)</span>
                 <label class="toggle-switch" style="transform: scale(0.8);">
@@ -115,7 +132,6 @@
                     <span class="slider round"></span>
                 </label>
             </div>
-
             <button class="action-btn btn-indigo" style="margin-top:10px;" onclick="showAccountDetails()">Show Ledger</button>
         </div>
 
@@ -131,7 +147,6 @@
     <div id="reports-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
         <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
         <h2 style="text-align:center; margin: 10px 0;">Financial Reports 📈</h2>
-        
         <div class="filters-box">
             <div style="display: flex; gap: 10px;"><div style="flex:1"><label>Year:</label><select id="repYear" class="form-select"></select></div><div style="flex:1"><label>Month:</label><select id="repMonth" class="form-select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div></div>
             
@@ -145,7 +160,7 @@
 
             <button class="action-btn btn-green" onclick="generateReport()">Generate Summary</button>
             <div style="height: 5px;"></div>
-            <button class="action-btn btn-red" onclick="alert('PDF generation is fully supported in the Android App version!')">🖨️ Save as PDF (Android Only)</button>
+            <button class="action-btn btn-red" onclick="printReport()">🖨️ Save as PDF (Android Only)</button>
             <div style="height: 5px;"></div>
             <button class="action-btn btn-indigo" onclick="navigateTo('charts')">📊 View Charts Analysis</button>
         </div>
@@ -154,10 +169,8 @@
 
     <div id="charts-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh; background: #eceff1;">
         <button class="back-btn" onclick="navigateTo('reports')" style="background: white; border: none; margin-bottom: 15px;">⬅ Back to Reports</button>
-        
         <div style="text-align:center; padding:15px; background:white; border-radius:10px; margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
             <h2 style="color:#444; margin:0;">FINANCIAL ANALYSIS</h2>
-            
             <div style="margin-top:10px;">
                 <label style="font-size:12px; color:#666;">Analysis Mode:</label>
                 <select id="chartModeSelect" class="form-select" style="margin-top:5px;" onchange="loadCharts()">
@@ -168,7 +181,6 @@
             </div>
             <p id="chartTitle" style="color:#888; margin:5px 0 0 0; font-size:12px;">Loading 22 Charts...</p>
         </div>
-        
         <div id="chartsContainer"></div>
     </div>
 
