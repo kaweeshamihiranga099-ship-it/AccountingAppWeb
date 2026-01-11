@@ -6,6 +6,10 @@ const savedPinKey = "user_pin";
 const colorModeKey = "ColorMode";
 let currentPin = "", state = 0, tempNewPin = "";
 
+// Global Variables for Dynamic Rows
+let drRows = [];
+let crRows = [];
+
 // Firebase Config
 const firebaseConfig = {
     apiKey: "AIzaSyDWCPkJB3VRkuLSIeDnE1Mk6z3YUPLMEnU",
@@ -244,53 +248,320 @@ function handlePinSubmit() {
 }
 function startChangePin() { state=1; updatePasswordUI(); }
 
-// =========================================
-// 5. TRANSACTIONS & HOME
-// =========================================
+// ==========================================
+// 5. DYNAMIC TRANSACTION LOGIC (HOME)
+// ==========================================
+
 function initHomeScreen() {
-    let d=document.getElementById("spinDrType"), c=document.getElementById("spinCrType"); d.innerHTML=""; c.innerHTML="";
-    accTypes.forEach(t => { d.innerHTML+=`<option>${t}</option>`; c.innerHTML+=`<option>${t}</option>`; });
-    updateAccountList('dr'); updateAccountList('cr');
-    setupLongPress();
+    // Reset Containers
+    let drCont = document.getElementById("drContainer");
+    let crCont = document.getElementById("crContainer");
+    
+    // මූලික HTML Elements තිබේදැයි පරීක්ෂා කිරීම
+    if(!drCont || !crCont) {
+        console.warn("Home Screen elements not found yet.");
+        return;
+    }
+
+    drCont.innerHTML = "";
+    crCont.innerHTML = "";
+    
+    drRows = [];
+    crRows = [];
+    
+    // Add Default 1 vs 1 Rows
+    addRow('dr');
+    addRow('cr');
+    
+    // UI Inputs Reset
+    if(document.getElementById("edCommonAmt")) document.getElementById("edCommonAmt").value = "";
+    if(document.getElementById("edCommonDesc")) document.getElementById("edCommonDesc").value = "";
+    
+    // Refresh Recent List
+    renderTodayTransactions();
+    setupLongPress(); // Initialize long press
 }
 
-function updateAccountList(s) {
-    let t = document.getElementById(s=='dr'?"spinDrType":"spinCrType").value;
-    let a = document.getElementById(s=='dr'?"spinDrAcc":"spinCrAcc"); a.innerHTML="";
-    let all = JSON.parse(localStorage.getItem("accounts") || "{}");
-    let h = JSON.parse(localStorage.getItem("hidden_accounts") || "[]");
-    if(all[t]) all[t].forEach(n => { if(!h.includes(n)) a.innerHTML+=`<option>${n}</option>`; });
+// ADD ROW FUNCTION
+function addRow(side) {
+    let container = document.getElementById(side + "Container");
+    if(!container) return;
+
+    let rowId = Date.now() + Math.random(); // Unique ID
+    
+    let div = document.createElement("div");
+    div.className = "trans-row";
+    div.id = "row_" + rowId;
+    
+    // Type Select
+    let selType = document.createElement("select");
+    accTypes.forEach(t => {
+        let opt = document.createElement("option");
+        opt.value = t; opt.innerText = t;
+        selType.appendChild(opt);
+    });
+    
+    // Account Select
+    let selAcc = document.createElement("select");
+    
+    // Amount Input
+    let inpAmt = document.createElement("input");
+    inpAmt.type = "number";
+    inpAmt.placeholder = "0.00";
+    inpAmt.className = "row-amt-input"; // CSS Class
+    inpAmt.onkeyup = updateUIMode; 
+    
+    // Delete Button
+    let btnDel = document.createElement("button");
+    btnDel.innerText = "X";
+    btnDel.className = "btn-del";
+    btnDel.onclick = function() { removeRow(side, rowId); };
+
+    // Append Elements
+    div.appendChild(selType);
+    div.appendChild(selAcc);
+    div.appendChild(inpAmt);
+    div.appendChild(btnDel);
+    container.appendChild(div);
+
+    // Store in Array
+    let rowObj = { id: rowId, el: div, type: selType, acc: selAcc, amt: inpAmt, btn: btnDel };
+    if(side === 'dr') drRows.push(rowObj); else crRows.push(rowObj);
+
+    // Update Accounts List based on Type Change
+    selType.onchange = function() { updateRowAccList(selType, selAcc); };
+    updateRowAccList(selType, selAcc); // Initial Load
+
+    updateUIMode();
 }
 
+// REMOVE ROW FUNCTION
+function removeRow(side, id) {
+    let list = (side === 'dr') ? drRows : crRows;
+    if(list.length <= 1) return; // අන්තිම පේළිය මකන්න දෙන්න එපා
+    
+    let idx = list.findIndex(r => r.id === id);
+    if(idx > -1) {
+        list[idx].el.remove();
+        list.splice(idx, 1);
+    }
+    updateUIMode();
+}
+
+// UPDATE ACCOUNT LIST (DROPDOWN)
+function updateRowAccList(selType, selAcc) {
+    let type = selType.value;
+    selAcc.innerHTML = "";
+    
+    let allStr = localStorage.getItem("accounts");
+    let all = allStr ? JSON.parse(allStr) : {};
+    
+    let hStr = localStorage.getItem("hidden_accounts");
+    let h = hStr ? JSON.parse(hStr) : [];
+    
+    if(all[type]) {
+        all[type].forEach(n => {
+            if(!h.includes(n)) {
+                let opt = document.createElement("option");
+                opt.value = n; opt.innerText = n;
+                selAcc.appendChild(opt);
+            }
+        });
+    }
+}
+
+// UPDATE UI MODE (VISIBILITY & TOTALS)
+function updateUIMode() {
+    let isSplit = (drRows.length > 1 || crRows.length > 1);
+    let commonAmtBox = document.getElementById("edCommonAmt");
+    
+    let totDr = 0;
+    let totCr = 0;
+
+    // Dr Total Calculation
+    drRows.forEach(r => {
+        if(!isSplit && drRows.length === 1) { 
+            r.amt.style.display = "none"; r.btn.style.display = "none";
+        } else { 
+            r.amt.style.display = "block"; r.btn.style.display = "block";
+        }
+        let val = parseFloat(r.amt.value);
+        if(!isNaN(val)) totDr += val;
+    });
+
+    // Cr Total Calculation
+    crRows.forEach(r => {
+        if(!isSplit && crRows.length === 1) { 
+            r.amt.style.display = "none"; r.btn.style.display = "none";
+        } else { 
+            r.amt.style.display = "block"; r.btn.style.display = "block";
+        }
+        let val = parseFloat(r.amt.value);
+        if(!isNaN(val)) totCr += val;
+    });
+
+    // Common Box Logic
+    if(isSplit) {
+        if(commonAmtBox) commonAmtBox.style.display = "none";
+    } else {
+        if(commonAmtBox) {
+            commonAmtBox.style.display = "block";
+            let commonVal = parseFloat(commonAmtBox.value);
+            if(!isNaN(commonVal)) {
+                totDr = commonVal;
+                totCr = commonVal;
+            }
+        }
+    }
+
+    // Update Label Text
+    let lblDr = document.getElementById("txtTotalDr");
+    let lblCr = document.getElementById("txtTotalCr");
+    
+    if(lblDr) lblDr.innerText = "Total Dr: " + totDr.toFixed(2);
+    if(lblCr) lblCr.innerText = "Total Cr: " + totCr.toFixed(2);
+
+    // Color Indication
+    let colorGreen = "#4CAF50";
+    let colorWarning = "#FFC107";
+    
+    if(Math.abs(totDr - totCr) < 0.01 && totDr > 0) {
+        if(lblDr) lblDr.style.color = colorGreen;
+        if(lblCr) lblCr.style.color = colorGreen;
+    } else {
+        if(isSplit) {
+            if(lblDr) lblDr.style.color = colorWarning;
+            if(lblCr) lblCr.style.color = colorWarning;
+        }
+    }
+}
+
+// SAVE TRANSACTION FUNCTION
 function saveTransaction() {
-    let dt=document.getElementById("spinDrType").value, da=document.getElementById("spinDrAcc").value;
-    let ct=document.getElementById("spinCrType").value, ca=document.getElementById("spinCrAcc").value;
-    let am=document.getElementById("edAmt").value, de=document.getElementById("edDesc").value;
+    let isSplit = (drRows.length > 1 || crRows.length > 1);
+    let totDr = 0, totCr = 0;
     
-    if(!da || !ca || !am) { showAlert("Error", "Missing Data!"); return; }
+    let commonBox = document.getElementById("edCommonAmt");
+    let commonAmt = commonBox ? (parseFloat(commonBox.value) || 0) : 0;
+
+    // Calculate Totals
+    if(isSplit) {
+        drRows.forEach(r => { let v = parseFloat(r.amt.value); if(!isNaN(v)) totDr += v; });
+        crRows.forEach(r => { let v = parseFloat(r.amt.value); if(!isNaN(v)) totCr += v; });
+    } else {
+        totDr = commonAmt;
+        totCr = commonAmt;
+    }
+
+    // Auto Balance Logic
+    if(drRows.length > 1 && crRows.length === 1 && totCr === 0) totCr = totDr;
+    else if(crRows.length > 1 && drRows.length === 1 && totDr === 0) totDr = totCr;
+
+    // --- VALIDATION ---
+    if(Math.abs(totDr - totCr) > 0.01) {
+        openErrorModal("හර සහ බැර වටිනාකම් සමාන නොවේ!\n(Dr: " + totDr.toFixed(2) + " | Cr: " + totCr.toFixed(2) + ")");
+        return;
+    }
+    if(totDr === 0) {
+        openErrorModal("කරුණාකර වටිනාකමක් (Amount) ඇතුළත් කරන්න.");
+        return;
+    }
+
+    // Data Preparation
+    let trArray = JSON.parse(localStorage.getItem("transactions") || "[]");
+    let descBox = document.getElementById("edCommonDesc");
+    let desc = descBox ? descBox.value : "";
+    let now = new Date();
     
-    let tr={
-        year: new Date().getFullYear().toString(), 
-        month: (new Date().getMonth()+1).toString(), 
-        date: getLocalTodayDate(),
-        dr_type:dt, dr_acc:da.trim(), 
-        cr_type:ct, cr_acc:ca.trim(), 
-        amount:am, desc:de
+    let dateStr = "";
+    if(typeof getLocalTodayDate === "function") {
+        dateStr = getLocalTodayDate();
+    } else {
+        const offset = now.getTimezoneOffset() * 60000;
+        dateStr = new Date(now.getTime() - offset).toISOString().split('T')[0];
+    }
+
+    let commonData = {
+        year: now.getFullYear().toString(),
+        month: (now.getMonth() + 1).toString(),
+        date: dateStr,
+        desc: desc
     };
+
+    // Save Logic
+    if(isSplit) {
+        if(drRows.length >= crRows.length) {
+            let crType = crRows[0].type.value;
+            let crAcc = crRows[0].acc.value;
+            drRows.forEach(dr => {
+                let amt = parseFloat(dr.amt.value) || 0;
+                if(amt > 0) {
+                    trArray.push({ ...commonData, dr_type: dr.type.value, dr_acc: dr.acc.value, cr_type: crType, cr_acc: crAcc, amount: amt.toString() });
+                }
+            });
+        } else {
+            let drType = drRows[0].type.value;
+            let drAcc = drRows[0].acc.value;
+            crRows.forEach(cr => {
+                let amt = parseFloat(cr.amt.value) || 0;
+                if(amt > 0) {
+                    trArray.push({ ...commonData, dr_type: drType, dr_acc: drAcc, cr_type: cr.type.value, cr_acc: cr.acc.value, amount: amt.toString() });
+                }
+            });
+        }
+    } else {
+        trArray.push({
+            ...commonData,
+            dr_type: drRows[0].type.value, dr_acc: drRows[0].acc.value,
+            cr_type: crRows[0].type.value, cr_acc: crRows[0].acc.value,
+            amount: commonAmt.toString()
+        });
+    }
+
+    // Store Data
+    localStorage.setItem("transactions", JSON.stringify(trArray));
     
-    let arr = JSON.parse(localStorage.getItem("transactions") || "[]");
-    arr.push(tr); 
-    localStorage.setItem("transactions", JSON.stringify(arr));
+    // Success Dialog
+    openSuccessModal();
     
-    showAlert("Success", "Saved! ✅"); 
-    document.getElementById("edAmt").value=""; document.getElementById("edDesc").value="";
+    // Reset UI
+    if(commonBox) commonBox.value = "";
+    if(descBox) descBox.value = "";
+    initHomeScreen();
     
-    // Attempt Backup on Save (Respects daily limit inside function)
+    // Backup Trigger
     if(auth && auth.currentUser) performCloudBackup(auth.currentUser.uid);
 }
 
+// 8. MODAL FUNCTIONS (SUCCESS & ERROR)
+function openSuccessModal() {
+    let modal = document.getElementById("successModal");
+    if(modal) modal.style.display = "flex";
+}
+
+function closeSuccessModal() {
+    let modal = document.getElementById("successModal");
+    if(modal) modal.style.display = "none";
+}
+
+function openErrorModal(msg) {
+    let modal = document.getElementById("errorModal");
+    let msgBody = document.getElementById("errorMsgBody");
+    if(modal && msgBody) {
+        msgBody.innerText = msg;
+        modal.style.display = "flex";
+    }
+}
+
+function closeErrorModal() {
+    let modal = document.getElementById("errorModal");
+    if(modal) modal.style.display = "none";
+}
+
 function setupLongPress() {
-    let btn=document.getElementById("btnSave"); let timer;
+    let btn=document.getElementById("btnSave"); 
+    if(!btn) return;
+    let timer;
     btn.addEventListener("touchstart", ()=>{ timer=setTimeout(()=>{navigateTo('new-settings')},1000); });
     btn.addEventListener("touchend", ()=>{ clearTimeout(timer); });
     btn.addEventListener("mousedown", ()=>{ timer=setTimeout(()=>{navigateTo('new-settings')},1000); });
@@ -361,7 +632,6 @@ function toggleAutoBackup() {
 function initFirebaseAndBackup() { 
     let u = auth.currentUser; 
     if(u) {
-        // මෙතැන 'true' යැවීම මගින් මෙය Manual Backup එකක් බව දන්වයි
         performCloudBackup(u.uid, true); 
     }
     else {
@@ -388,27 +658,14 @@ function firebaseRegister() {
 }
 
 function performCloudBackup(uid, isManual = false) {
-    
-    // --- Manual Backup නොවේ නම් පමණක් නීති පරීක්ෂා කරන්න ---
     if (!isManual) {
-        // 1. Switch එක OFF නම් නවතින්න
-        if (localStorage.getItem("auto_backup_enabled") === "false") {
-            console.log("Auto Backup is OFF");
-            return;
-        }
-
-        // 2. දිනපතා සීමාව (Daily Check)
+        if (localStorage.getItem("auto_backup_enabled") === "false") return;
         let nowCheck = new Date();
         let todayDate = nowCheck.getFullYear() + '-' + (nowCheck.getMonth() + 1).toString().padStart(2, '0') + '-' + nowCheck.getDate().toString().padStart(2, '0');
         let lastBackup = localStorage.getItem("last_backup_date_log");
-
-        if (todayDate === lastBackup) {
-            console.log("Skipping: Already backed up today.");
-            return; 
-        }
+        if (todayDate === lastBackup) return; 
     }
 
-    // --- දත්ත සකස් කිරීම ---
     let data = { 
         transactions: localStorage.getItem("transactions") || "[]", 
         accounts: localStorage.getItem("accounts") || "{}", 
@@ -417,7 +674,6 @@ function performCloudBackup(uid, isManual = false) {
     
     let ts = Date.now();
     let now = new Date();
-    // List එකේ පෙන්වන දිනය (Example: 2024-05-20 10:30:00)
     let displayDate = now.getFullYear() + "-" + 
                       (now.getMonth() + 1).toString().padStart(2, '0') + "-" + 
                       now.getDate().toString().padStart(2, '0') + " " + 
@@ -425,18 +681,14 @@ function performCloudBackup(uid, isManual = false) {
                       now.getMinutes().toString().padStart(2, '0') + ":" + 
                       now.getSeconds().toString().padStart(2, '0');
 
-    // Firebase වෙත යැවීම
     db.ref('users/' + uid + '/backups').push({ 
         data: JSON.stringify(data), 
         timestamp: ts, 
         date_label: displayDate 
     }).then(() => {
-        
-        // සාර්ථක නම් අද දිනය Log කරන්න (Auto Backup සඳහා)
         let todayDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
         localStorage.setItem("last_backup_date_log", todayDate);
         
-        // පැරණි Backups මකා දැමීම (Limit 10)
         db.ref('users/' + uid + '/backups').once('value').then(snap => {
             if(snap.numChildren() > 10) { 
                 let keys = Object.keys(snap.val()); 
@@ -444,20 +696,12 @@ function performCloudBackup(uid, isManual = false) {
             }
         });
         
-        // Manual නම් පණිවිඩයක් පෙන්වන්න
-        if (isManual) {
-            showAlert("Success", "Manual Backup Successful! ☁✅");
-        } else {
-            console.log("Auto Backup Complete.");
-        }
+        if (isManual) showAlert("Success", "Manual Backup Successful! ☁✅");
 
     }).catch(e => {
-        console.error("Backup Failed", e);
         if (isManual) showAlert("Error", "Backup Failed: " + e.message);
     });
 }
-
-
 
 function restoreFromCloud() {
     let u = auth.currentUser;
@@ -467,59 +711,30 @@ function restoreFromCloud() {
     const listDiv = document.getElementById("restoreList");
     listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
 
-    // Query එක සරල කළා (orderByChild ඉවත් කළා - දෝෂ මගහරවා ගැනීමට)
     db.ref('users/' + u.uid + '/backups').limitToLast(15).once('value')
     .then(snapshot => {
         listDiv.innerHTML = "";
+        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
         
-        if (!snapshot.exists()) { 
-            listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; 
-            return; 
-        }
-        
-        // දත්ත Array එකකට ගැනීම (අලුත් ඒවා උඩට එන ලෙස Reverse කිරීම)
         let backups = [];
-        snapshot.forEach(child => { 
-            backups.unshift({ key: child.key, val: child.val() }); 
-        });
+        snapshot.forEach(child => { backups.unshift({ key: child.key, val: child.val() }); });
         
         backups.forEach(item => {
             let val = item.val;
             let btn = document.createElement("button"); 
             btn.className = "action-btn btn-indigo"; 
             btn.style.marginBottom = "8px";
-            btn.style.textAlign = "left"; // අකුරු වම් පැත්තට
+            btn.style.textAlign = "left"; 
 
-            // --- 🛠️ දිනය සොයා ගැනීමේ Logic එක (ROBUST DATE FINDER) ---
             let displayLabel = "📅 Unknown Date";
-
-            if (val.date_label) {
-                // 1. Web/App එකෙන් එන සම්මත නම
-                displayLabel = "📅 " + val.date_label;
-            } 
-            else if (val.date) {
-                // 2. සමහර පැරණි සංස්කරණ වල 'date' ලෙස තිබිය හැක
-                displayLabel = "📅 " + val.date;
-            } 
+            if (val.date_label) displayLabel = "📅 " + val.date_label;
             else if (val.timestamp) {
-                // 3. නමක් නැත්නම් Timestamp එක දිනයක් බවට හරවන්න
-                try {
-                    let d = new Date(val.timestamp);
-                    displayLabel = "📅 " + d.toLocaleDateString() + " " + d.toLocaleTimeString();
-                } catch (e) { 
-                    displayLabel = "📅 Time Error"; 
-                }
+                try { let d = new Date(val.timestamp); displayLabel = "📅 " + d.toLocaleDateString() + " " + d.toLocaleTimeString(); } 
+                catch (e) { displayLabel = "📅 Time Error"; }
             } 
-            else {
-                // 4. කිසිවක් නැත්නම් Key එකෙන් කොටසක් පෙන්වන්න
-                displayLabel = "📅 Backup ID: " + item.key.substring(0, 6);
-            }
-
+            
             btn.innerText = displayLabel;
-            
-            // Backup එක Click කළාම Restore වෙන්න
             btn.onclick = () => confirmRestore(val.data);
-            
             listDiv.appendChild(btn);
         });
     })
@@ -581,7 +796,6 @@ function showAccountDetails() {
     let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
     let td=0, tc=0, ob=0;
     
-    // B/F Logic
     let isNominal = (type === "ආදායම්" || type === "වියදම්");
     if (monthlyMode && isNominal) { ob = 0; } 
     else {
@@ -648,7 +862,6 @@ function generateReport() {
 
     let html = `<div style="text-align:center; margin-bottom:20px;"><h2>MY LEDGER - FULL REPORT</h2><p>${periodStr}</p></div><hr>`;
 
-    // --- 1. TRIAL BALANCE ---
     html += `<div class="report-section"><h3 class="text-center">1. TRIAL BALANCE</h3><table class="tb-table"><thead><tr><th>Account Name</th><th>Dr</th><th>Cr</th></tr></thead><tbody>`;
     let totTbDr = 0, totTbCr = 0, allAccNames = [];
     Object.keys(accounts).forEach(type => { accounts[type].forEach(acc => { if(!hidden.includes(acc)) allAccNames.push({name: acc, type: type}); }); });
@@ -692,7 +905,6 @@ function generateReport() {
     });
     html += `<tr style="background:#f0f0f0; font-weight:bold;"><td>TOTALS</td><td style="text-align:right">${totTbDr.toFixed(2)}</td><td style="text-align:right">${totTbCr.toFixed(2)}</td></tr></tbody></table></div>`;
 
-    // --- 2. GENERAL LEDGER ---
     html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">2. GENERAL LEDGER</h3>`;
     allAccNames.forEach(item => {
         let acc = item.name, type = item.type;
@@ -745,7 +957,6 @@ function generateReport() {
         }
     });
 
-    // --- 3. FINANCIAL STATEMENTS ---
     html += `<div class="print-page-break"></div><h3 class="text-center" style="margin-top:20px;">3. FINANCIAL STATEMENTS</h3>`;
     let ta=0, tl=0, te=0, ti=0, tx=0;
     tr.forEach(t => {
