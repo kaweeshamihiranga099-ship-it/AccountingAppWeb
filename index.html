@@ -43,21 +43,42 @@
         <button id="btnChangePin" class="text-btn" onclick="startChangePin()">Change PIN</button>
     </div>
 
-    <div id="home-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
+
+      <div id="home-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
         <div class="nav-bar">
             <button class="nav-btn btn-settings" onclick="navigateTo('settings')">Settings</button>
             <button class="nav-btn btn-accounts" onclick="navigateTo('accounts')">Accounts</button>
             <button class="nav-btn btn-reports" onclick="navigateTo('reports')">Reports</button>
         </div>
         <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+
         <div class="form-container">
-            <label class="form-label">හර (Debit) ගිණුම:</label><select id="spinDrType" class="form-select" onchange="updateAccountList('dr')"></select><select id="spinDrAcc" class="form-select"></select><div style="height: 15px;"></div>
-            <label class="form-label">බැර (Credit) ගිණුම:</label><select id="spinCrType" class="form-select" onchange="updateAccountList('cr')"></select><select id="spinCrAcc" class="form-select"></select><div style="height: 15px;"></div>
-            <input type="number" id="edAmt" class="form-input" placeholder="වටිනාකම (Rs.)"><input type="text" id="edDesc" class="form-input" placeholder="විස්තරය">
+            
+            <div style="border-bottom: 1px solid #eee; margin-bottom: 10px; padding-bottom: 5px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label class="form-label" style="color: #4CAF50;">හර (Debit) අංශය:</label>
+                    <span id="txtTotalDr" style="font-size:12px; color:#4CAF50; font-weight:bold;">Total: 0.00</span>
+                </div>
+                <div id="drContainer"></div> <button class="mini-btn" style="color:#4CAF50; border:1px dashed #4CAF50; margin-top:5px; width:100%; background:transparent; padding:5px; cursor:pointer;" onclick="addRow('dr')">+ Add Debit Row</button>
+            </div>
+
+            <div style="border-bottom: 1px solid #eee; margin-bottom: 10px; padding-bottom: 5px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label class="form-label" style="color: #F44336;">බැර (Credit) අංශය:</label>
+                    <span id="txtTotalCr" style="font-size:12px; color:#F44336; font-weight:bold;">Total: 0.00</span>
+                </div>
+                <div id="crContainer"></div> <button class="mini-btn" style="color:#F44336; border:1px dashed #F44336; margin-top:5px; width:100%; background:transparent; padding:5px; cursor:pointer;" onclick="addRow('cr')">+ Add Credit Row</button>
+            </div>
+
+            <input type="number" id="edCommonAmt" class="form-input" placeholder="වටිනාකම (Rs.)" onkeyup="updateUIMode()">
+            <input type="text" id="edCommonDesc" class="form-input" placeholder="විස්තරය (Description)">
+
             <button id="btnSave" class="save-btn" onclick="saveTransaction()">Save Transaction</button>
             <p style="text-align: center; font-size: 10px; color: #555; margin-top: 5px;">(Long Press to open Quick Settings)</p>
         </div>
+
         <div style="height: 30px;"></div>
+
         <div class="rules-box">
             <h4>ගිණුම්කරණ රීති (Rules)</h4>
             <table>
@@ -70,6 +91,8 @@
             </table>
         </div>
     </div>
+    
+    
 
     <div id="settings-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
         <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
@@ -243,5 +266,55 @@
             });
         }
     </script>
+    
+    
+    
+    
+    
+    <div id="successModal" class="modal-overlay" style="display: none; z-index: 5000;">
+    <div class="modal-box" style="text-align: center; padding: 30px;">
+        <div class="success-checkmark">
+            <div class="check-icon">
+                <span class="icon-line line-tip"></span>
+                <span class="icon-line line-long"></span>
+                <div class="icon-circle"></div>
+                <div class="icon-fix"></div>
+            </div>
+        </div>
+        
+        <h3 style="color: #4CAF50; margin-top: 20px;">Saved Successfully!</h3>
+        <p style="color: #666;">ගනුදෙනුව සාර්ථකව වාර්තා විය.</p>
+        
+        <button class="action-btn btn-blue" onclick="closeSuccessModal()" style="width: 50%; margin-top: 20px;">OK</button>
+    </div>
+</div>
+
+    
+    
+<div id="errorModal" class="modal-overlay" style="display: none; z-index: 5000;">
+    <div class="modal-box" style="text-align: center; padding: 30px;">
+        <div class="error-checkmark">
+            <div class="error-icon">
+                <span class="x-mark">
+                    <span class="line-left"></span>
+                    <span class="line-right"></span>
+                </span>
+            </div>
+        </div>
+        
+        <h3 style="color: #F44336; margin-top: 20px;">Error!</h3>
+        <p id="errorMsgBody" style="color: #666; font-size: 14px;">Something went wrong.</p>
+        
+        <button class="action-btn btn-red" onclick="closeErrorModal()" style="width: 50%; margin-top: 20px;">Try Again</button>
+    </div>
+</div>
+    
+    
+   
+   
+   
+   
+   
+   
 </body>
 </html>
