@@ -435,3 +435,89 @@ input:checked + .slider { background-color: #2196F3; } input:checked + .slider:b
     54% { width: 0; right: 46px; top: 54px; }
     100% { width: 47px; left: 17px; top: 37px; }
 }
+
+
+
+/* --- BUDGET LIMIT STYLES --- */
+
+/* Limit Card (Settings) */
+.limit-card {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    border: 1px solid #eee;
+}
+
+.limit-card h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.limit-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.limit-row label {
+    font-size: 13px;
+    color: #666;
+    width: 60px;
+}
+
+.limit-row input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* Alert Cards (Home) */
+.alert-card {
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-left: 5px solid;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.alert-critical {
+    background-color: #FFEBEE;
+    border-color: #D32F2F;
+    color: #B71C1C;
+}
+
+.alert-warning {
+    background-color: #FFF8E1;
+    border-color: #FFA000;
+    color: #F57F17;
+}
+
+.alert-title {
+    font-weight: bold;
+    font-size: 14px;
+    display: block;
+}
+
+.alert-desc {
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+
+
+
+
+
+
+
+
+
+
+
