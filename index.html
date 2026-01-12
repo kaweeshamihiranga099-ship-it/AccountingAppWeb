@@ -162,6 +162,9 @@
         <button class="back-btn" onclick="navigateTo('home')">⬅ Back to Home</button>
         <h2 style="text-align:center; margin: 10px 0;">Account View 📊</h2>
         
+        <div style="margin-bottom: 10px;">
+            <input type="text" id="ledgerSearchInput" class="form-input" placeholder="🔍 Search Ledger (Date, Desc, Amount)...">
+        </div>
         <div class="filters-box">
             <label>Type:</label><select id="accTypeSelect" class="form-select" onchange="updateAccountFilterList()"></select>
             <label>Account:</label><select id="accSelect" class="form-select"></select>
