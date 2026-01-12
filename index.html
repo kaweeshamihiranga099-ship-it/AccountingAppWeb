@@ -45,7 +45,15 @@
 
 
       <div id="home-screen" class="screen" style="display: none; padding: 15px; overflow-y: auto; height: 100vh;">
-        <div class="nav-bar">
+       
+          
+          <div id="home-screen" class="screen">
+    <div id="budgetAlertContainer" style="padding: 15px; padding-bottom: 80px;"></div>
+
+    </div>
+
+          
+          <div class="nav-bar">
             <button class="nav-btn btn-settings" onclick="navigateTo('settings')">Settings</button>
             <button class="nav-btn btn-accounts" onclick="navigateTo('accounts')">Accounts</button>
             <button class="nav-btn btn-reports" onclick="navigateTo('reports')">Reports</button>
@@ -103,6 +111,12 @@
         <div class="settings-card"><h3>2. ගිණුම් මකන්න</h3><select id="delSpinType" class="form-select" onchange="updateDelList()"></select><select id="delSpinAcc" class="form-select"></select><button class="action-btn btn-red" onclick="deleteAccount()">Delete Account</button></div>
         
         <div class="settings-card" style="background-color: #E0F7FA; border: 1px solid #006064;"><h3>3. Advanced Management</h3><p style="font-size: 12px; color: #006064; margin-bottom: 10px;">Manage Active Accounts & Edit Today's Entries</p><button class="action-btn" style="background-color: #0097A7;" onclick="navigateTo('new-settings')">📂 Open Advanced Settings</button></div>
+
+
+<div class="settings-group">
+    <h3>Budget Control</h3>
+    <button class="action-btn btn-blue" onclick="navigateTo('limits')">Set Budget Limits 🎯</button>
+</div>
         
         <div class="settings-card">
             <h3>4. Backup & Restore</h3>
@@ -310,7 +324,24 @@
 </div>
     
     
-   
+
+
+<div id="limits-screen" class="screen" style="display: none; padding-bottom: 80px;">
+    <div class="header">
+        <h2>Budget Limits 🎯</h2>
+        <p>Set Daily, Weekly & Monthly Limits</p>
+    </div>
+    
+    <div id="limitsContainer" style="padding: 15px;">
+        </div>
+
+    <div style="padding: 15px;">
+        <button class="action-btn btn-green" onclick="saveLimits()">SAVE ALL LIMITS ✅</button>
+        <button class="action-btn btn-red" onclick="navigateTo('settings')" style="margin-top: 10px;">Back</button>
+    </div>
+</div>
+    
+    
    
    
    
