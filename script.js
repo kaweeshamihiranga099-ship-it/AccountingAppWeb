@@ -117,7 +117,8 @@ function navigateTo(name) {
                 el.style.background = "#f5f7fa";
             }
         }
-
+        
+        if (name === 'limits') initLimitsScreen();
         if (name === 'home') initHomeScreen();
         if (name === 'settings') initSettingsScreen();
         if (name === 'accounts') initAccountScreen();
@@ -280,6 +281,8 @@ function initHomeScreen() {
     // Refresh Recent List
     renderTodayTransactions();
     setupLongPress(); // Initialize long press
+    renderBudgetAlerts();
+
 }
 
 // ADD ROW FUNCTION
@@ -523,7 +526,7 @@ function saveTransaction() {
     
     // Success Dialog
     openSuccessModal();
-    
+    renderBudgetAlerts();
     // Reset UI
     if(commonBox) commonBox.value = "";
     if(descBox) descBox.value = "";
@@ -1116,3 +1119,165 @@ function deleteTransaction(idx) {
         renderTodayTransactions(); showAlert("Success","Deleted!");
     });
 }
+
+
+
+
+
+// ==========================================
+// BUDGET LIMITS LOGIC (WEB VERSION)
+// ==========================================
+
+function initLimitsScreen() {
+    let container = document.getElementById("limitsContainer");
+    container.innerHTML = "";
+    
+    let accounts = JSON.parse(localStorage.getItem("accounts") || "{}");
+    let limits = JSON.parse(localStorage.getItem("limit_data") || "{}");
+    let expAccs = accounts["වියදම්"] || [];
+
+    if(expAccs.length === 0) {
+        container.innerHTML = "<p>වියදම් ගිණුම් නොමැත.</p>";
+        return;
+    }
+
+    expAccs.forEach(acc => {
+        let card = document.createElement("div");
+        card.className = "limit-card";
+        
+        // IDs for inputs
+        let idD = `lim_daily_${acc}`;
+        let idW = `lim_weekly_${acc}`;
+        let idM = `lim_monthly_${acc}`;
+        
+        // HTML Structure
+        card.innerHTML = `
+            <h4>${acc}</h4>
+            <div class="limit-row">
+                <label>Daily:</label>
+                <input type="number" id="${idD}" placeholder="No Limit" value="${limits[idD] || ''}">
+            </div>
+            <div class="limit-row">
+                <label>Weekly:</label>
+                <input type="number" id="${idW}" placeholder="No Limit" value="${limits[idW] || ''}">
+            </div>
+            <div class="limit-row">
+                <label>Monthly:</label>
+                <input type="number" id="${idM}" placeholder="No Limit" value="${limits[idM] || ''}">
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function saveLimits() {
+    let accounts = JSON.parse(localStorage.getItem("accounts") || "{}");
+    let limits = {};
+    let expAccs = accounts["වියදම්"] || [];
+
+    expAccs.forEach(acc => {
+        let valD = document.getElementById(`lim_daily_${acc}`).value;
+        let valW = document.getElementById(`lim_weekly_${acc}`).value;
+        let valM = document.getElementById(`lim_monthly_${acc}`).value;
+
+        if(valD) limits[`lim_daily_${acc}`] = valD;
+        if(valW) limits[`lim_weekly_${acc}`] = valW;
+        if(valM) limits[`lim_monthly_${acc}`] = valM;
+    });
+
+    localStorage.setItem("limit_data", JSON.stringify(limits));
+    alert("Limits Saved Successfully! ✅");
+    navigateTo('settings');
+}
+
+function renderBudgetAlerts() {
+    let container = document.getElementById("budgetAlertContainer");
+    if(!container) return;
+    container.innerHTML = "";
+
+    let limits = JSON.parse(localStorage.getItem("limit_data") || "{}");
+    let trans = JSON.parse(localStorage.getItem("transactions") || "[]");
+    
+    // Dates
+    let now = new Date();
+    let todayStr = now.toISOString().split('T')[0];
+    let curMonth = (now.getMonth() + 1).toString();
+    let curYear = now.getFullYear().toString();
+    let curWeek = getWeekNumber(now); // Helper needed
+
+    // Calculate Spending
+    let spentDay = {}, spentWeek = {}, spentMonth = {};
+    let relevantAccs = new Set();
+
+    trans.forEach(t => {
+        if(t.dr_type === "වියදම්") {
+            let acc = t.dr_acc;
+            let amt = parseFloat(t.amount);
+            let tDate = new Date(t.date);
+            
+            relevantAccs.add(acc);
+
+            // Daily
+            if(t.date === todayStr) spentDay[acc] = (spentDay[acc] || 0) + amt;
+
+            // Monthly
+            if(t.year == curYear && t.month == curMonth) spentMonth[acc] = (spentMonth[acc] || 0) + amt;
+
+            // Weekly
+            if(t.year == curYear && getWeekNumber(tDate) == curWeek) spentWeek[acc] = (spentWeek[acc] || 0) + amt;
+        }
+    });
+
+    // Generate Alerts
+    let hasAlerts = false;
+    let html = "";
+
+    relevantAccs.forEach(acc => {
+        let types = ["daily", "weekly", "monthly"];
+        let labels = ["Today", "This Week", "This Month"];
+        let maps = [spentDay, spentWeek, spentMonth];
+        let mapKeys = [`lim_daily_${acc}`, `lim_weekly_${acc}`, `lim_monthly_${acc}`];
+
+        for(let k=0; k<3; k++) {
+            let limitVal = limits[mapKeys[k]];
+            if(limitVal) {
+                let limit = parseFloat(limitVal);
+                let spent = maps[k][acc] || 0;
+                
+                if(limit > 0) {
+                    let pct = (spent / limit) * 100;
+                    if(pct >= 75) {
+                        hasAlerts = true;
+                        let isRed = pct >= 100;
+                        let diff = Math.abs(spent - limit).toFixed(2);
+                        let cls = isRed ? "alert-critical" : "alert-warning";
+                        let icon = isRed ? "🚨" : "⚠️";
+                        let msg = isRed ? `Exceeded by ${diff}` : `Remaining: ${diff} (${Math.round(pct)}% used)`;
+
+                        html += `
+                        <div class="alert-card ${cls}">
+                            <span class="alert-title">${icon} ${acc} (${labels[k]})</span>
+                            <span class="alert-desc">${msg}</span>
+                        </div>`;
+                    }
+                }
+            }
+        }
+    });
+
+    if(hasAlerts) {
+        container.innerHTML = `<h4 style="margin-bottom:10px; color:#666; font-size:12px;">BUDGET ALERTS</h4>` + html;
+    }
+}
+
+// Helper: Get Week Number
+function getWeekNumber(d) {
+    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+    var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    var weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+    return weekNo;
+}
+
+
+
