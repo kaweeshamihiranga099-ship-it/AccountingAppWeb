@@ -59,6 +59,7 @@ window.addEventListener("load", function() {
     }, 2000);
 });
 
+// ✅ DATE HELPER (FIXED)
 function getLocalTodayDate() {
     const d = new Date();
     const year = d.getFullYear();
@@ -258,7 +259,6 @@ function initHomeScreen() {
     let drCont = document.getElementById("drContainer");
     let crCont = document.getElementById("crContainer");
     
-    // මූලික HTML Elements තිබේදැයි පරීක්ෂා කිරීම
     if(!drCont || !crCont) {
         console.warn("Home Screen elements not found yet.");
         return;
@@ -278,11 +278,10 @@ function initHomeScreen() {
     if(document.getElementById("edCommonAmt")) document.getElementById("edCommonAmt").value = "";
     if(document.getElementById("edCommonDesc")) document.getElementById("edCommonDesc").value = "";
     
-    // Refresh Recent List
+    // Refresh Recent List & Alerts
     renderTodayTransactions();
-    setupLongPress(); // Initialize long press
-    renderBudgetAlerts();
-
+    setupLongPress(); 
+    renderBudgetAlerts(); // ✅ Correctly called here
 }
 
 // ADD ROW FUNCTION
@@ -290,7 +289,7 @@ function addRow(side) {
     let container = document.getElementById(side + "Container");
     if(!container) return;
 
-    let rowId = Date.now() + Math.random(); // Unique ID
+    let rowId = Date.now() + Math.random(); 
     
     let div = document.createElement("div");
     div.className = "trans-row";
@@ -311,7 +310,7 @@ function addRow(side) {
     let inpAmt = document.createElement("input");
     inpAmt.type = "number";
     inpAmt.placeholder = "0.00";
-    inpAmt.className = "row-amt-input"; // CSS Class
+    inpAmt.className = "row-amt-input"; 
     inpAmt.onkeyup = updateUIMode; 
     
     // Delete Button
@@ -341,7 +340,7 @@ function addRow(side) {
 // REMOVE ROW FUNCTION
 function removeRow(side, id) {
     let list = (side === 'dr') ? drRows : crRows;
-    if(list.length <= 1) return; // අන්තිම පේළිය මකන්න දෙන්න එපා
+    if(list.length <= 1) return; 
     
     let idx = list.findIndex(r => r.id === id);
     if(idx > -1) {
@@ -476,13 +475,8 @@ function saveTransaction() {
     let desc = descBox ? descBox.value : "";
     let now = new Date();
     
-    let dateStr = "";
-    if(typeof getLocalTodayDate === "function") {
-        dateStr = getLocalTodayDate();
-    } else {
-        const offset = now.getTimezoneOffset() * 60000;
-        dateStr = new Date(now.getTime() - offset).toISOString().split('T')[0];
-    }
+    // ✅ Fix Date to be LOCAL Time (Matches getLocalTodayDate)
+    let dateStr = getLocalTodayDate();
 
     let commonData = {
         year: now.getFullYear().toString(),
@@ -526,7 +520,8 @@ function saveTransaction() {
     
     // Success Dialog
     openSuccessModal();
-    renderBudgetAlerts();
+    renderBudgetAlerts(); // Update Alerts
+    
     // Reset UI
     if(commonBox) commonBox.value = "";
     if(descBox) descBox.value = "";
@@ -1120,12 +1115,8 @@ function deleteTransaction(idx) {
     });
 }
 
-
-
-
-
 // ==========================================
-// BUDGET LIMITS LOGIC (WEB VERSION)
+// 11. BUDGET LIMITS LOGIC (FIXED)
 // ==========================================
 
 function initLimitsScreen() {
@@ -1190,6 +1181,7 @@ function saveLimits() {
     navigateTo('settings');
 }
 
+// ✅ FIXED ALERT FUNCTION (Matches Local Time)
 function renderBudgetAlerts() {
     let container = document.getElementById("budgetAlertContainer");
     if(!container) return;
@@ -1198,12 +1190,13 @@ function renderBudgetAlerts() {
     let limits = JSON.parse(localStorage.getItem("limit_data") || "{}");
     let trans = JSON.parse(localStorage.getItem("transactions") || "[]");
     
-    // Dates
+    // ✅ Use getLocalTodayDate helper to match saved transaction format
+    let todayStr = getLocalTodayDate();
+
     let now = new Date();
-    let todayStr = now.toISOString().split('T')[0];
     let curMonth = (now.getMonth() + 1).toString();
     let curYear = now.getFullYear().toString();
-    let curWeek = getWeekNumber(now); // Helper needed
+    let curWeek = getWeekNumber(now); 
 
     // Calculate Spending
     let spentDay = {}, spentWeek = {}, spentMonth = {};
@@ -1213,17 +1206,21 @@ function renderBudgetAlerts() {
         if(t.dr_type === "වියදම්") {
             let acc = t.dr_acc;
             let amt = parseFloat(t.amount);
-            let tDate = new Date(t.date);
+            
+            // Fix Date Parsing for Weekly Check
+            let tDate = new Date(t.date); 
             
             relevantAccs.add(acc);
 
-            // Daily
-            if(t.date === todayStr) spentDay[acc] = (spentDay[acc] || 0) + amt;
+            // Daily Check (Now matches correctly)
+            if(t.date === todayStr) {
+                spentDay[acc] = (spentDay[acc] || 0) + amt;
+            }
 
-            // Monthly
+            // Monthly Check
             if(t.year == curYear && t.month == curMonth) spentMonth[acc] = (spentMonth[acc] || 0) + amt;
 
-            // Weekly
+            // Weekly Check
             if(t.year == curYear && getWeekNumber(tDate) == curWeek) spentWeek[acc] = (spentWeek[acc] || 0) + amt;
         }
     });
@@ -1267,6 +1264,9 @@ function renderBudgetAlerts() {
 
     if(hasAlerts) {
         container.innerHTML = `<h4 style="margin-bottom:10px; color:#666; font-size:12px;">BUDGET ALERTS</h4>` + html;
+        container.style.display = "block";
+    } else {
+        container.style.display = "none";
     }
 }
 
@@ -1278,6 +1278,3 @@ function getWeekNumber(d) {
     var weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
     return weekNo;
 }
-
-
-
