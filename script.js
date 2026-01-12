@@ -772,15 +772,28 @@ function restoreBackup(i) {
 // 8. ACCOUNTS VIEW & LOGIC (UPDATED WITH SEARCH)
 // =========================================
 function initAccountScreen() {
-    let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
-    accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
-    for(let i=2024;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
-    document.getElementById("monthSelect").value=new Date().getMonth()+1; 
+    let t = document.getElementById("accTypeSelect");
+    let y = document.getElementById("yearSelect");
     
+    // Dropdowns Reset
+    t.innerHTML = "";
+    y.innerHTML = "";
+    
+    accTypes.forEach(x => t.innerHTML += `<option>${x}</option>`);
+    for (let i = 2024; i <= 2050; i++) {
+        y.innerHTML += `<option ${i == new Date().getFullYear() ? 'selected' : ''}>${i}</option>`;
+    }
+    
+    document.getElementById("monthSelect").value = new Date().getMonth() + 1;
     updateAccountFilterList();
 
-    // ✅ ADDED: Search Listener
-    document.getElementById("ledgerSearchInput").addEventListener("keyup", showAccountDetails);
+    // ✅ මේ කොටස තමයි අලුතෙන් එකතු වුනේ (Search Listener)
+    let searchInput = document.getElementById("ledgerSearchInput");
+    if (searchInput) {
+        // පරණ listeners ඉවත් කර අලුත් එකක් දැමීම (Duplicate වළක්වයි)
+        searchInput.removeEventListener("keyup", showAccountDetails);
+        searchInput.addEventListener("keyup", showAccountDetails);
+    }
 }
 
 function updateAccountFilterList() {
@@ -789,85 +802,130 @@ function updateAccountFilterList() {
     if(all[t]) all[t].forEach(n=>{ if(!h.includes(n)) s.innerHTML+=`<option>${n}</option>`; });
 }
 
-function showAccountDetails() {
-    let ac=document.getElementById("accSelect").value, yr=document.getElementById("yearSelect").value, mo=document.getElementById("monthSelect").value;
-    let type=document.getElementById("accTypeSelect").value;
-    let monthlyMode = document.getElementById("accModeSwitch").checked;
-    
-    // ✅ ADDED: Get Search Text
-    let searchText = document.getElementById("ledgerSearchInput").value.toLowerCase();
 
-    if(!ac) return; 
+
+
+function showAccountDetails() {
+    let ac = document.getElementById("accSelect").value;
+    let yr = document.getElementById("yearSelect").value;
+    let mo = document.getElementById("monthSelect").value;
+    let type = document.getElementById("accTypeSelect").value;
+    let monthlyMode = document.getElementById("accModeSwitch").checked;
+
+    // ✅ Search Text එක ලබා ගැනීම
+    let searchEl = document.getElementById("ledgerSearchInput");
+    let searchText = searchEl ? searchEl.value.toLowerCase().trim() : "";
+
+    if (!ac) return;
+
     document.getElementById("tAccTitle").innerText = ac + (monthlyMode ? " (Monthly Mode)" : "");
-    let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
-    let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
-    let td=0, tc=0, ob=0;
+    let dr = document.getElementById("drContent");
+    let cr = document.getElementById("crContent");
     
+    dr.innerHTML = "";
+    cr.innerHTML = "";
+
+    let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
+    let td = 0, tc = 0, ob = 0;
+
+    // 1. OPENING BALANCE CALCULATION
     let isNominal = (type === "ආදායම්" || type === "වියදම්");
-    if (monthlyMode && isNominal) { ob = 0; } 
-    else {
-        tr.forEach(x => { 
-            let tY=parseInt(x.year), tM=parseInt(x.month), sY=parseInt(yr), sM=parseInt(mo);
-            if (tY < sY || (tY == sY && tM < sM)) { 
-                let a=parseFloat(x.amount); if (x.dr_acc.trim()==ac) ob+=a; if (x.cr_acc.trim()==ac) ob-=a; 
-            } 
+    if (monthlyMode && isNominal) {
+        ob = 0;
+    } else {
+        tr.forEach(x => {
+            let tY = parseInt(x.year), tM = parseInt(x.month), sY = parseInt(yr), sM = parseInt(mo);
+            if (tY < sY || (tY == sY && tM < sM)) {
+                let a = parseFloat(x.amount);
+                if (x.dr_acc.trim() == ac) ob += a;
+                if (x.cr_acc.trim() == ac) ob -= a;
+            }
         });
+        
+        // Capital Account Logic
         if (monthlyMode && type === "හිමිකම්") {
             let retained = 0;
             tr.forEach(x => {
-                let tY=parseInt(x.year), tM=parseInt(x.month), sY=parseInt(yr), sM=parseInt(mo);
+                let tY = parseInt(x.year), tM = parseInt(x.month), sY = parseInt(yr), sM = parseInt(mo);
                 if (tY < sY || (tY == sY && tM < sM)) {
-                    let a=parseFloat(x.amount);
-                    if (x.cr_type === "ආදායම්") retained += a; if (x.dr_type === "ආදායම්") retained -= a;
-                    if (x.dr_type === "වියදම්") retained -= a; if (x.cr_type === "වියදම්") retained += a;
+                    let a = parseFloat(x.amount);
+                    if (x.cr_type === "ආදායම්") retained += a;
+                    if (x.dr_type === "ආදායම්") retained -= a;
+                    if (x.dr_type === "වියදම්") retained -= a;
+                    if (x.cr_type === "වියදම්") retained += a;
                 }
             });
             ob -= retained;
         }
     }
 
-    if(ob!=0) { 
-        let d=document.createElement("div"); d.className="t-item t-bf"; 
-        d.innerText="B/F : "+Math.abs(ob).toFixed(2); 
-        if(ob>0){dr.appendChild(d); td+=ob;} else{cr.appendChild(d); tc+=Math.abs(ob);} 
+    // Show B/F Row
+    if (ob != 0) {
+        let d = document.createElement("div");
+        d.className = "t-item t-bf";
+        d.innerText = "B/F : " + Math.abs(ob).toFixed(2);
+        if (ob > 0) { dr.appendChild(d); td += ob; } 
+        else { cr.appendChild(d); tc += Math.abs(ob); }
     }
 
-    tr.forEach(x=>{ 
-        if(x.year==yr && x.month==mo) { 
-            // ✅ ADDED: Search Logic
+    // 2. DISPLAY TRANSACTIONS (WITH SEARCH)
+    tr.forEach(x => {
+        if (x.year == yr && x.month == mo) {
+            
+            // ✅ Search Logic එක මෙතනට එකතු කර ඇත
             let contraName = "";
             if (x.dr_acc.trim() == ac) contraName = x.cr_acc;
             else if (x.cr_acc.trim() == ac) contraName = x.dr_acc;
+            else return; // මේ ගිණුමට අදාළ නැත්නම් පෙන්වන්න එපා
 
-            let searchMatch = true;
-            if (searchText) {
+            let isMatch = true;
+            if (searchText !== "") {
                 let descStr = (x.desc || "").toLowerCase();
                 let dateStr = x.date.toLowerCase();
                 let amtStr = x.amount.toString();
                 let contraStr = contraName.toLowerCase();
 
+                // විස්තරය, දිනය, මුදල හෝ අනෙක් ගිණුමේ නම තුළ සෙවුම් වචනය තිබේදැයි බලයි
                 if (!descStr.includes(searchText) && 
                     !dateStr.includes(searchText) && 
-                    !contraStr.includes(searchText) &&
+                    !contraStr.includes(searchText) && 
                     !amtStr.includes(searchText)) {
-                    searchMatch = false;
+                    isMatch = false;
                 }
             }
 
-            if (searchMatch) {
-                let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; 
-                d.onclick=()=>showAlert("Details", x.desc); 
-                if(x.dr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a; }
-                else if(x.cr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a; } 
+            if (isMatch) {
+                let a = parseFloat(x.amount);
+                let d = document.createElement("div");
+                d.className = "t-item";
+                d.onclick = () => showAlert("Details", x.desc || "No Description");
+
+                if (x.dr_acc.trim() == ac) {
+                    d.innerText = `${x.date} | ${x.cr_acc} : ${a}`;
+                    dr.appendChild(d);
+                    td += a;
+                } else if (x.cr_acc.trim() == ac) {
+                    d.innerText = `${x.date} | ${x.dr_acc} : ${a}`;
+                    cr.appendChild(d);
+                    tc += a;
+                }
             }
-        } 
+        }
     });
 
-    document.getElementById("drTotal").innerText=td.toFixed(2); document.getElementById("crTotal").innerText=tc.toFixed(2);
-    let b=td-tc, bb=document.getElementById("finalBalanceBox"); 
-    bb.innerText="Balance c/d: "+Math.abs(b).toFixed(2) + (b>=0?" (Dr)":" (Cr)");
-    bb.style.backgroundColor=b>=0?"#4CAF50":"#F44336";
+    // 3. FINAL TOTALS
+    document.getElementById("drTotal").innerText = td.toFixed(2);
+    document.getElementById("crTotal").innerText = tc.toFixed(2);
+    
+    let b = td - tc;
+    let bb = document.getElementById("finalBalanceBox");
+    bb.innerText = "Balance c/d: " + Math.abs(b).toFixed(2) + (b >= 0 ? " (Dr)" : " (Cr)");
+    bb.style.backgroundColor = b >= 0 ? "#4CAF50" : "#F44336";
 }
+
+
+
+
 
 // =========================================
 // 9. FULL REPORT (SUMMARY)
