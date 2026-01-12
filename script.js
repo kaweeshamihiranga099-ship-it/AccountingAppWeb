@@ -769,14 +769,20 @@ function restoreBackup(i) {
 }
 
 // =========================================
-// 8. ACCOUNTS VIEW & LOGIC
+// 8. ACCOUNTS VIEW & LOGIC (UPDATED WITH SEARCH)
 // =========================================
 function initAccountScreen() {
     let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
     accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
     for(let i=2024;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
-    document.getElementById("monthSelect").value=new Date().getMonth()+1; updateAccountFilterList();
+    document.getElementById("monthSelect").value=new Date().getMonth()+1; 
+    
+    updateAccountFilterList();
+
+    // ✅ ADDED: Search Listener
+    document.getElementById("ledgerSearchInput").addEventListener("keyup", showAccountDetails);
 }
+
 function updateAccountFilterList() {
     let t=document.getElementById("accTypeSelect").value, s=document.getElementById("accSelect"); s.innerHTML="";
     let all=JSON.parse(localStorage.getItem("accounts")||"{}"), h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
@@ -788,6 +794,9 @@ function showAccountDetails() {
     let type=document.getElementById("accTypeSelect").value;
     let monthlyMode = document.getElementById("accModeSwitch").checked;
     
+    // ✅ ADDED: Get Search Text
+    let searchText = document.getElementById("ledgerSearchInput").value.toLowerCase();
+
     if(!ac) return; 
     document.getElementById("tAccTitle").innerText = ac + (monthlyMode ? " (Monthly Mode)" : "");
     let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
@@ -825,10 +834,32 @@ function showAccountDetails() {
 
     tr.forEach(x=>{ 
         if(x.year==yr && x.month==mo) { 
-            let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; 
-            d.onclick=()=>showAlert("Details", x.desc); 
-            if(x.dr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a; }
-            else if(x.cr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a; } 
+            // ✅ ADDED: Search Logic
+            let contraName = "";
+            if (x.dr_acc.trim() == ac) contraName = x.cr_acc;
+            else if (x.cr_acc.trim() == ac) contraName = x.dr_acc;
+
+            let searchMatch = true;
+            if (searchText) {
+                let descStr = (x.desc || "").toLowerCase();
+                let dateStr = x.date.toLowerCase();
+                let amtStr = x.amount.toString();
+                let contraStr = contraName.toLowerCase();
+
+                if (!descStr.includes(searchText) && 
+                    !dateStr.includes(searchText) && 
+                    !contraStr.includes(searchText) &&
+                    !amtStr.includes(searchText)) {
+                    searchMatch = false;
+                }
+            }
+
+            if (searchMatch) {
+                let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; 
+                d.onclick=()=>showAlert("Details", x.desc); 
+                if(x.dr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a; }
+                else if(x.cr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a; } 
+            }
         } 
     });
 
