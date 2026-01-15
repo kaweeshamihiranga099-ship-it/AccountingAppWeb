@@ -1,14 +1,17 @@
 // =========================================
 // 1. GLOBAL CONFIG & FIREBASE SETUP
 // =========================================
+
 const accTypes = ["වත්කම්", "වගකීම්", "හිමිකම්", "ආදායම්", "වියදම්"];
 const savedPinKey = "user_pin";
 const colorModeKey = "ColorMode";
+
 let currentPin = "", state = 0, tempNewPin = "";
 
 // Global Variables for Dynamic Rows
 let drRows = [];
 let crRows = [];
+let currentCalcTargetId = ""; // කැල්කියුලේටරය සඳහා target ID එක
 
 // Firebase Config
 const firebaseConfig = {
@@ -31,6 +34,7 @@ try {
 // =========================================
 // 2. INITIALIZATION
 // =========================================
+
 window.addEventListener("load", function() {
     let savedScale = localStorage.getItem("app_scale");
     if(savedScale) try { updateFontPreview(savedScale); } catch(e){}
@@ -47,7 +51,7 @@ window.addEventListener("load", function() {
         auth.onAuthStateChanged(user => {
             if(user) {
                 listenForAdminMessages(user.uid);
-                performCloudBackup(user.uid); // ✅ Daily Backup Check on Load
+                performCloudBackup(user.uid); 
             }
         });
     }
@@ -59,7 +63,7 @@ window.addEventListener("load", function() {
     }, 2000);
 });
 
-// ✅ DATE HELPER (FIXED)
+// ✅ DATE HELPER
 function getLocalTodayDate() {
     const d = new Date();
     const year = d.getFullYear();
@@ -107,7 +111,6 @@ function navigateTo(name) {
     if (el) {
         el.style.display = (name === 'password') ? 'flex' : 'block';
         
-        // Apply Theme Background Logic
         let savedMode = localStorage.getItem(colorModeKey);
         let isColorful = savedMode !== "false";
         
@@ -132,6 +135,7 @@ function navigateTo(name) {
 // =========================================
 // 3. ADMIN MESSAGES
 // =========================================
+
 function listenForAdminMessages(uid) {
     const ref = db.ref('users/' + uid + '/notifications');
     ref.limitToLast(1).on('child_added', (snapshot) => {
@@ -143,7 +147,6 @@ function listenForAdminMessages(uid) {
             
             document.getElementById("adminMsgBody").innerHTML = bodyText;
             document.getElementById("adminMsgModal").style.display = "flex";
-            
             snapshot.ref.remove(); 
         }
     });
@@ -152,6 +155,7 @@ function listenForAdminMessages(uid) {
 // =========================================
 // 4. PASSWORD & UI THEME
 // =========================================
+
 function navigateToPassword() {
     let el = document.getElementById("password-screen"); 
     el.style.display = "flex";
@@ -174,7 +178,6 @@ function toggleColorMode() {
 }
 
 function applyGlobalTheme(isColorful) {
-    // 1. Apply to Password Screen
     let passScreen = document.getElementById("password-screen");
     let passTitle = document.getElementById("passTitle");
     let passSub = document.getElementById("passSub");
@@ -198,7 +201,6 @@ function applyGlobalTheme(isColorful) {
         });
     }
 
-    // 2. Apply to other screens if they are currently visible
     document.querySelectorAll('.screen').forEach(sc => {
         if(sc.id !== "password-screen" && sc.id !== "splash-screen" && sc.style.display !== 'none') {
              sc.style.background = isColorful ? "linear-gradient(135deg, #E0F7FA 0%, #F3E5F5 100%)" : "#f5f7fa";
@@ -248,21 +250,17 @@ function handlePinSubmit() {
         else if(state==3) { if(currentPin==tempNewPin) { localStorage.setItem(savedPinKey, currentPin); showAlert("Success","PIN Set!"); navigateTo('home'); } else { showAlert("Error","Mismatch!"); state=2; updatePasswordUI(); } }
     }, 200);
 }
+
 function startChangePin() { state=1; updatePasswordUI(); }
 
 // ==========================================
 // 5. DYNAMIC TRANSACTION LOGIC (HOME)
 // ==========================================
-
 function initHomeScreen() {
-    // Reset Containers
     let drCont = document.getElementById("drContainer");
     let crCont = document.getElementById("crContainer");
     
-    if(!drCont || !crCont) {
-        console.warn("Home Screen elements not found yet.");
-        return;
-    }
+    if(!drCont || !crCont) return;
 
     drCont.innerHTML = "";
     crCont.innerHTML = "";
@@ -270,78 +268,87 @@ function initHomeScreen() {
     drRows = [];
     crRows = [];
     
-    // Add Default 1 vs 1 Rows
     addRow('dr');
     addRow('cr');
     
-    // UI Inputs Reset
     if(document.getElementById("edCommonAmt")) document.getElementById("edCommonAmt").value = "";
     if(document.getElementById("edCommonDesc")) document.getElementById("edCommonDesc").value = "";
     
-    // Refresh Recent List & Alerts
     renderTodayTransactions();
     setupLongPress(); 
-    renderBudgetAlerts(); // ✅ Correctly called here
+    renderBudgetAlerts();
 }
 
-// ADD ROW FUNCTION
+// ✅ UPDATED ADD ROW FUNCTION (With Calculator Support)
 function addRow(side) {
     let container = document.getElementById(side + "Container");
     if(!container) return;
 
     let rowId = Date.now() + Math.random(); 
-    
+    let inputId = "amt_" + rowId.toString().replace('.',''); // Unique ID
+
     let div = document.createElement("div");
     div.className = "trans-row";
     div.id = "row_" + rowId;
     
-    // Type Select
+    // 1. Type Select
     let selType = document.createElement("select");
+    selType.style.flex = "1.2";
     accTypes.forEach(t => {
         let opt = document.createElement("option");
         opt.value = t; opt.innerText = t;
         selType.appendChild(opt);
     });
     
-    // Account Select
+    // 2. Account Select
     let selAcc = document.createElement("select");
-    
-    // Amount Input
+    selAcc.style.flex = "1.5";
+
+    // 3. Amount Input Group (Input + Calc Button)
+    let amountWrapper = document.createElement("div");
+    amountWrapper.className = "input-group";
+    amountWrapper.style.flex = "1"; 
+
     let inpAmt = document.createElement("input");
     inpAmt.type = "number";
     inpAmt.placeholder = "0.00";
     inpAmt.className = "row-amt-input"; 
+    inpAmt.id = inputId; // Unique ID set here
     inpAmt.onkeyup = updateUIMode; 
     
-    // Delete Button
+    // Calc Button for this row
+    let btnCalc = document.createElement("button");
+    btnCalc.innerText = "🧮";
+    btnCalc.className = "mini-calc-btn";
+    btnCalc.onclick = function() { openCalculator(inputId); }; 
+
+    amountWrapper.appendChild(inpAmt);
+    amountWrapper.appendChild(btnCalc);
+    
+    // 4. Delete Button
     let btnDel = document.createElement("button");
     btnDel.innerText = "X";
     btnDel.className = "btn-del";
     btnDel.onclick = function() { removeRow(side, rowId); };
 
-    // Append Elements
+    // Append All Elements
     div.appendChild(selType);
     div.appendChild(selAcc);
-    div.appendChild(inpAmt);
+    div.appendChild(amountWrapper); 
     div.appendChild(btnDel);
     container.appendChild(div);
 
-    // Store in Array
     let rowObj = { id: rowId, el: div, type: selType, acc: selAcc, amt: inpAmt, btn: btnDel };
     if(side === 'dr') drRows.push(rowObj); else crRows.push(rowObj);
 
-    // Update Accounts List based on Type Change
     selType.onchange = function() { updateRowAccList(selType, selAcc); };
-    updateRowAccList(selType, selAcc); // Initial Load
-
+    updateRowAccList(selType, selAcc);
     updateUIMode();
 }
 
-// REMOVE ROW FUNCTION
 function removeRow(side, id) {
     let list = (side === 'dr') ? drRows : crRows;
     if(list.length <= 1) return; 
-    
     let idx = list.findIndex(r => r.id === id);
     if(idx > -1) {
         list[idx].el.remove();
@@ -350,17 +357,11 @@ function removeRow(side, id) {
     updateUIMode();
 }
 
-// UPDATE ACCOUNT LIST (DROPDOWN)
 function updateRowAccList(selType, selAcc) {
     let type = selType.value;
     selAcc.innerHTML = "";
-    
-    let allStr = localStorage.getItem("accounts");
-    let all = allStr ? JSON.parse(allStr) : {};
-    
-    let hStr = localStorage.getItem("hidden_accounts");
-    let h = hStr ? JSON.parse(hStr) : [];
-    
+    let all = JSON.parse(localStorage.getItem("accounts") || "{}");
+    let h = JSON.parse(localStorage.getItem("hidden_accounts") || "[]");
     if(all[type]) {
         all[type].forEach(n => {
             if(!h.includes(n)) {
@@ -372,110 +373,70 @@ function updateRowAccList(selType, selAcc) {
     }
 }
 
-// UPDATE UI MODE (VISIBILITY & TOTALS)
 function updateUIMode() {
     let isSplit = (drRows.length > 1 || crRows.length > 1);
     let commonAmtBox = document.getElementById("edCommonAmt");
-    
-    let totDr = 0;
-    let totCr = 0;
+    let totDr = 0, totCr = 0;
 
-    // Dr Total Calculation
     drRows.forEach(r => {
-        if(!isSplit && drRows.length === 1) { 
-            r.amt.style.display = "none"; r.btn.style.display = "none";
-        } else { 
-            r.amt.style.display = "block"; r.btn.style.display = "block";
-        }
+        if(!isSplit && drRows.length === 1) { r.amt.style.display = "none"; r.btn.style.display = "none"; } 
+        else { r.amt.style.display = "block"; r.btn.style.display = "block"; }
         let val = parseFloat(r.amt.value);
         if(!isNaN(val)) totDr += val;
     });
 
-    // Cr Total Calculation
     crRows.forEach(r => {
-        if(!isSplit && crRows.length === 1) { 
-            r.amt.style.display = "none"; r.btn.style.display = "none";
-        } else { 
-            r.amt.style.display = "block"; r.btn.style.display = "block";
-        }
+        if(!isSplit && crRows.length === 1) { r.amt.style.display = "none"; r.btn.style.display = "none"; } 
+        else { r.amt.style.display = "block"; r.btn.style.display = "block"; }
         let val = parseFloat(r.amt.value);
         if(!isNaN(val)) totCr += val;
     });
 
-    // Common Box Logic
     if(isSplit) {
         if(commonAmtBox) commonAmtBox.style.display = "none";
     } else {
         if(commonAmtBox) {
             commonAmtBox.style.display = "block";
             let commonVal = parseFloat(commonAmtBox.value);
-            if(!isNaN(commonVal)) {
-                totDr = commonVal;
-                totCr = commonVal;
-            }
+            if(!isNaN(commonVal)) { totDr = commonVal; totCr = commonVal; }
         }
     }
 
-    // Update Label Text
     let lblDr = document.getElementById("txtTotalDr");
     let lblCr = document.getElementById("txtTotalCr");
-    
     if(lblDr) lblDr.innerText = "Total Dr: " + totDr.toFixed(2);
     if(lblCr) lblCr.innerText = "Total Cr: " + totCr.toFixed(2);
 
-    // Color Indication
-    let colorGreen = "#4CAF50";
-    let colorWarning = "#FFC107";
-    
+    let colorGreen = "#4CAF50", colorWarning = "#FFC107";
     if(Math.abs(totDr - totCr) < 0.01 && totDr > 0) {
-        if(lblDr) lblDr.style.color = colorGreen;
-        if(lblCr) lblCr.style.color = colorGreen;
+        if(lblDr) lblDr.style.color = colorGreen; if(lblCr) lblCr.style.color = colorGreen;
     } else {
-        if(isSplit) {
-            if(lblDr) lblDr.style.color = colorWarning;
-            if(lblCr) lblCr.style.color = colorWarning;
-        }
+        if(isSplit) { if(lblDr) lblDr.style.color = colorWarning; if(lblCr) lblCr.style.color = colorWarning; }
     }
 }
 
-// SAVE TRANSACTION FUNCTION
 function saveTransaction() {
     let isSplit = (drRows.length > 1 || crRows.length > 1);
     let totDr = 0, totCr = 0;
-    
     let commonBox = document.getElementById("edCommonAmt");
     let commonAmt = commonBox ? (parseFloat(commonBox.value) || 0) : 0;
 
-    // Calculate Totals
     if(isSplit) {
         drRows.forEach(r => { let v = parseFloat(r.amt.value); if(!isNaN(v)) totDr += v; });
         crRows.forEach(r => { let v = parseFloat(r.amt.value); if(!isNaN(v)) totCr += v; });
     } else {
-        totDr = commonAmt;
-        totCr = commonAmt;
+        totDr = commonAmt; totCr = commonAmt;
     }
 
-    // Auto Balance Logic
     if(drRows.length > 1 && crRows.length === 1 && totCr === 0) totCr = totDr;
     else if(crRows.length > 1 && drRows.length === 1 && totDr === 0) totDr = totCr;
 
-    // --- VALIDATION ---
-    if(Math.abs(totDr - totCr) > 0.01) {
-        openErrorModal("හර සහ බැර වටිනාකම් සමාන නොවේ!\n(Dr: " + totDr.toFixed(2) + " | Cr: " + totCr.toFixed(2) + ")");
-        return;
-    }
-    if(totDr === 0) {
-        openErrorModal("කරුණාකර වටිනාකමක් (Amount) ඇතුළත් කරන්න.");
-        return;
-    }
+    if(Math.abs(totDr - totCr) > 0.01) { openErrorModal("හර සහ බැර වටිනාකම් සමාන නොවේ!"); return; }
+    if(totDr === 0) { openErrorModal("කරුණාකර වටිනාකමක් (Amount) ඇතුළත් කරන්න."); return; }
 
-    // Data Preparation
     let trArray = JSON.parse(localStorage.getItem("transactions") || "[]");
-    let descBox = document.getElementById("edCommonDesc");
-    let desc = descBox ? descBox.value : "";
+    let desc = document.getElementById("edCommonDesc").value;
     let now = new Date();
-    
-    // ✅ Fix Date to be LOCAL Time (Matches getLocalTodayDate)
     let dateStr = getLocalTodayDate();
 
     let commonData = {
@@ -485,80 +446,40 @@ function saveTransaction() {
         desc: desc
     };
 
-    // Save Logic
     if(isSplit) {
         if(drRows.length >= crRows.length) {
-            let crType = crRows[0].type.value;
-            let crAcc = crRows[0].acc.value;
+            let crType = crRows[0].type.value, crAcc = crRows[0].acc.value;
             drRows.forEach(dr => {
                 let amt = parseFloat(dr.amt.value) || 0;
-                if(amt > 0) {
-                    trArray.push({ ...commonData, dr_type: dr.type.value, dr_acc: dr.acc.value, cr_type: crType, cr_acc: crAcc, amount: amt.toString() });
-                }
+                if(amt > 0) trArray.push({ ...commonData, dr_type: dr.type.value, dr_acc: dr.acc.value, cr_type: crType, cr_acc: crAcc, amount: amt.toString() });
             });
         } else {
-            let drType = drRows[0].type.value;
-            let drAcc = drRows[0].acc.value;
+            let drType = drRows[0].type.value, drAcc = drRows[0].acc.value;
             crRows.forEach(cr => {
                 let amt = parseFloat(cr.amt.value) || 0;
-                if(amt > 0) {
-                    trArray.push({ ...commonData, dr_type: drType, dr_acc: drAcc, cr_type: cr.type.value, cr_acc: cr.acc.value, amount: amt.toString() });
-                }
+                if(amt > 0) trArray.push({ ...commonData, dr_type: drType, dr_acc: drAcc, cr_type: cr.type.value, cr_acc: cr.acc.value, amount: amt.toString() });
             });
         }
     } else {
-        trArray.push({
-            ...commonData,
-            dr_type: drRows[0].type.value, dr_acc: drRows[0].acc.value,
-            cr_type: crRows[0].type.value, cr_acc: crRows[0].acc.value,
-            amount: commonAmt.toString()
-        });
+        trArray.push({ ...commonData, dr_type: drRows[0].type.value, dr_acc: drRows[0].acc.value, cr_type: crRows[0].type.value, cr_acc: crRows[0].acc.value, amount: commonAmt.toString() });
     }
 
-    // Store Data
     localStorage.setItem("transactions", JSON.stringify(trArray));
-    
-    // Success Dialog
     openSuccessModal();
-    renderBudgetAlerts(); // Update Alerts
-    
-    // Reset UI
+    renderBudgetAlerts(); 
     if(commonBox) commonBox.value = "";
-    if(descBox) descBox.value = "";
+    document.getElementById("edCommonDesc").value = "";
     initHomeScreen();
-    
-    // Backup Trigger
     if(auth && auth.currentUser) performCloudBackup(auth.currentUser.uid);
 }
 
-// 8. MODAL FUNCTIONS (SUCCESS & ERROR)
-function openSuccessModal() {
-    let modal = document.getElementById("successModal");
-    if(modal) modal.style.display = "flex";
-}
-
-function closeSuccessModal() {
-    let modal = document.getElementById("successModal");
-    if(modal) modal.style.display = "none";
-}
-
-function openErrorModal(msg) {
-    let modal = document.getElementById("errorModal");
-    let msgBody = document.getElementById("errorMsgBody");
-    if(modal && msgBody) {
-        msgBody.innerText = msg;
-        modal.style.display = "flex";
-    }
-}
-
-function closeErrorModal() {
-    let modal = document.getElementById("errorModal");
-    if(modal) modal.style.display = "none";
-}
+function openSuccessModal() { document.getElementById("successModal").style.display = "flex"; }
+function closeSuccessModal() { document.getElementById("successModal").style.display = "none"; }
+function openErrorModal(msg) { document.getElementById("errorMsgBody").innerText = msg; document.getElementById("errorModal").style.display = "flex"; }
+function closeErrorModal() { document.getElementById("errorModal").style.display = "none"; }
 
 function setupLongPress() {
-    let btn=document.getElementById("btnSave"); 
-    if(!btn) return;
+    let btn=document.getElementById("btnSave"); if(!btn) return;
     let timer;
     btn.addEventListener("touchstart", ()=>{ timer=setTimeout(()=>{navigateTo('new-settings')},1000); });
     btn.addEventListener("touchend", ()=>{ clearTimeout(timer); });
@@ -567,15 +488,14 @@ function setupLongPress() {
 }
 
 // =========================================
-// 6. SETTINGS (ACCOUNTS & BACKUP UI)
+// 6. SETTINGS
 // =========================================
+
 function initSettingsScreen() {
     let c=document.getElementById("setSpinType"), d=document.getElementById("delSpinType"); c.innerHTML=""; d.innerHTML="";
     accTypes.forEach(t => { c.innerHTML+=`<option>${t}</option>`; d.innerHTML+=`<option>${t}</option>`; });
     updateDelList();
     let sc = localStorage.getItem("app_scale") || "10"; document.getElementById("fontSlider").value = sc; updateFontPreview(sc);
-
-    // Auto Backup Switch State
     let isAutoBackup = localStorage.getItem("auto_backup_enabled") !== "false"; 
     document.getElementById("autoBackupSwitch").checked = isAutoBackup;
 }
@@ -595,26 +515,21 @@ function createAccount() {
 }
 
 function updateDelList() {
-    let t = document.getElementById("delSpinType").value;
-    let s = document.getElementById("delSpinAcc"); s.innerHTML="";
+    let t = document.getElementById("delSpinType").value, s = document.getElementById("delSpinAcc"); s.innerHTML="";
     let all = JSON.parse(localStorage.getItem("accounts") || "{}");
     if(all[t]) all[t].forEach(n => s.innerHTML += `<option>${n}</option>`);
 }
 
 function deleteAccount() {
-    let t = document.getElementById("delSpinType").value;
-    let n = document.getElementById("delSpinAcc").value;
+    let t = document.getElementById("delSpinType").value, n = document.getElementById("delSpinAcc").value;
     if(!n) return;
     let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
-    if(tr.some(x => x.dr_acc === n || x.cr_acc === n)) {
-        showAlert("Error", "Cannot delete! Account used."); return;
-    }
+    if(tr.some(x => x.dr_acc === n || x.cr_acc === n)) { showAlert("Error", "Cannot delete! Account used."); return; }
     showAlert("Confirm", "Delete '" + n + "'?", true, function() {
         let all = JSON.parse(localStorage.getItem("accounts") || "{}");
         all[t] = all[t].filter(x => x !== n);
         localStorage.setItem("accounts", JSON.stringify(all));
-        showAlert("Success", "Deleted!");
-        updateDelList();
+        showAlert("Success", "Deleted!"); updateDelList();
     });
 }
 
@@ -624,137 +539,89 @@ function toggleAutoBackup() {
     showAlert("Settings", isEnabled ? "Auto Backup Enabled! ✅" : "Auto Backup Disabled! ❌");
 }
 
-// =========================================
-// 7. BACKUP LOGIC (DAILY LIMIT & DATE FIX)
-// =========================================
-function initFirebaseAndBackup() { 
-    let u = auth.currentUser; 
-    if(u) {
-        performCloudBackup(u.uid, true); 
-    }
-    else {
-        document.getElementById("loginModal").style.display="flex"; 
-    }
-}
-
-function firebaseLogin() { 
-    auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
-    .then(u => { 
-        document.getElementById("loginModal").style.display = "none"; 
-        showAlert("Success", "Logged In!"); 
-        if(localStorage.getItem("auto_backup_enabled") !== "false") performCloudBackup(u.user.uid);
-    }).catch(e => showAlert("Error", e.message)); 
-}
-
-function firebaseRegister() { 
-    auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value)
-    .then(u => { 
-        document.getElementById("loginModal").style.display = "none"; 
-        showAlert("Success", "Registered!"); 
-        if(localStorage.getItem("auto_backup_enabled") !== "false") performCloudBackup(u.user.uid);
-    }).catch(e => showAlert("Error", e.message)); 
-}
+function initFirebaseAndBackup() { if(auth.currentUser) performCloudBackup(auth.currentUser.uid, true); else document.getElementById("loginModal").style.display="flex"; }
+function firebaseLogin() { auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success", "Logged In!"); if(localStorage.getItem("auto_backup_enabled")!=="false") performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error", e.message)); }
+function firebaseRegister() { auth.createUserWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).then(u=>{ document.getElementById("loginModal").style.display="none"; showAlert("Success", "Registered!"); if(localStorage.getItem("auto_backup_enabled")!=="false") performCloudBackup(u.user.uid); }).catch(e=>showAlert("Error", e.message)); }
 
 function performCloudBackup(uid, isManual = false) {
-    if (!isManual) {
-        if (localStorage.getItem("auto_backup_enabled") === "false") return;
-        let nowCheck = new Date();
-        let todayDate = nowCheck.getFullYear() + '-' + (nowCheck.getMonth() + 1).toString().padStart(2, '0') + '-' + nowCheck.getDate().toString().padStart(2, '0');
-        let lastBackup = localStorage.getItem("last_backup_date_log");
-        if (todayDate === lastBackup) return; 
-    }
-
-    let data = { 
-        transactions: localStorage.getItem("transactions") || "[]", 
-        accounts: localStorage.getItem("accounts") || "{}", 
-        hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" 
-    };
-    
-    let ts = Date.now();
+    if (!isManual && localStorage.getItem("auto_backup_enabled") === "false") return;
+    let data = { transactions: localStorage.getItem("transactions") || "[]", accounts: localStorage.getItem("accounts") || "{}", hidden_accounts: localStorage.getItem("hidden_accounts") || "[]" };
     let now = new Date();
-    let displayDate = now.getFullYear() + "-" + 
-                      (now.getMonth() + 1).toString().padStart(2, '0') + "-" + 
-                      now.getDate().toString().padStart(2, '0') + " " + 
-                      now.getHours().toString().padStart(2, '0') + ":" + 
-                      now.getMinutes().toString().padStart(2, '0') + ":" + 
-                      now.getSeconds().toString().padStart(2, '0');
-
-    db.ref('users/' + uid + '/backups').push({ 
-        data: JSON.stringify(data), 
-        timestamp: ts, 
-        date_label: displayDate 
-    }).then(() => {
-        let todayDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
-        localStorage.setItem("last_backup_date_log", todayDate);
-        
-        db.ref('users/' + uid + '/backups').once('value').then(snap => {
-            if(snap.numChildren() > 10) { 
-                let keys = Object.keys(snap.val()); 
-                db.ref('users/' + uid + '/backups/' + keys[0]).remove(); 
-            }
-        });
-        
-        if (isManual) showAlert("Success", "Manual Backup Successful! ☁✅");
-
-    }).catch(e => {
-        if (isManual) showAlert("Error", "Backup Failed: " + e.message);
-    });
+    let displayDate = now.toISOString().replace("T"," ").substring(0,19);
+    db.ref('users/' + uid + '/backups').push({ data: JSON.stringify(data), timestamp: Date.now(), date_label: displayDate }).then(() => { if (isManual) showAlert("Success", "Manual Backup Successful! ☁✅"); });
 }
 
 function restoreFromCloud() {
-    let u = auth.currentUser;
-    if (!u) { showAlert("Error", "Please Login first!"); return; }
-    
+    if (!auth.currentUser) { showAlert("Error", "Please Login first!"); return; }
     document.getElementById("restoreModal").style.display = "flex";
-    const listDiv = document.getElementById("restoreList");
-    listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
-
-    db.ref('users/' + u.uid + '/backups').limitToLast(15).once('value')
-    .then(snapshot => {
-        listDiv.innerHTML = "";
-        if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
-        
-        let backups = [];
-        snapshot.forEach(child => { backups.unshift({ key: child.key, val: child.val() }); });
-        
+    const listDiv = document.getElementById("restoreList"); listDiv.innerHTML = "<p style='text-align:center'>Loading backups...</p>";
+    db.ref('users/' + auth.currentUser.uid + '/backups').limitToLast(15).once('value').then(snapshot => {
+        listDiv.innerHTML = ""; if (!snapshot.exists()) { listDiv.innerHTML = "<p style='text-align:center'>No backups found.</p>"; return; }
+        let backups = []; snapshot.forEach(child => { backups.unshift({ key: child.key, val: child.val() }); });
         backups.forEach(item => {
-            let val = item.val;
-            let btn = document.createElement("button"); 
-            btn.className = "action-btn btn-indigo"; 
-            btn.style.marginBottom = "8px";
-            btn.style.textAlign = "left"; 
-
-            let displayLabel = "📅 Unknown Date";
-            if (val.date_label) displayLabel = "📅 " + val.date_label;
-            else if (val.timestamp) {
-                try { let d = new Date(val.timestamp); displayLabel = "📅 " + d.toLocaleDateString() + " " + d.toLocaleTimeString(); } 
-                catch (e) { displayLabel = "📅 Time Error"; }
-            } 
-            
-            btn.innerText = displayLabel;
-            btn.onclick = () => confirmRestore(val.data);
-            listDiv.appendChild(btn);
+            let btn = document.createElement("button"); btn.className = "action-btn btn-indigo"; btn.style.marginBottom = "8px"; btn.style.textAlign = "left"; 
+            btn.innerText = "📅 " + (item.val.date_label || new Date(item.val.timestamp).toLocaleString());
+            btn.onclick = () => confirmRestore(item.val.data); listDiv.appendChild(btn);
         });
-    })
-    .catch(error => {
-        listDiv.innerHTML = "<p style='color:red; text-align:center'>Error: " + error.message + "</p>";
     });
 }
 
+
+
+
+
+// =========================================
+// UPDATE 3: UNIVERSAL RESTORE (FIX FOR APP & WEB BACKUPS)
+// =========================================
 function confirmRestore(rawData) {
-    showAlert("Confirm", "Restore this backup?", true, function() {
+    showAlert("Confirm", "Restore this backup? (Current data will be replaced)", true, function() {
         try {
-            let d = (typeof rawData === 'string') ? JSON.parse(rawData) : rawData;
-            if(typeof d === 'string') d = JSON.parse(d); 
-            localStorage.setItem("transactions", d.transactions);
-            localStorage.setItem("accounts", d.accounts);
-            if(d.hidden_accounts) localStorage.setItem("hidden_accounts", d.hidden_accounts);
-            fixDataIntegrity();
-            showAlert("Success", "Restored! Reloading...");
+            // 1. දත්ත JSON ද String ද කියා බලා Parse කරගැනීම
+            let d;
+            if (typeof rawData === 'string') {
+                try { d = JSON.parse(rawData); } catch(e) { d = rawData; }
+            } else {
+                d = rawData;
+            }
+
+            // සමහර විට App එකෙන් එන දත්ත දෙපාරක් Stringify වී තිබිය හැක, එය නිවැරදි කිරීම
+            if (typeof d === 'string') {
+                try { d = JSON.parse(d); } catch(e) {} 
+            }
+
+            // 2. අදාළ කොටස් වෙන් කර ගැනීම
+            let transData = d.transactions;
+            let accData = d.accounts;
+            let hiddenData = d.hidden_accounts;
+
+            // 3. App එකේ SQLite Backup එකේදී transactions Array එක String එකක් ලෙස පැමිණිය හැක
+            if (typeof transData === 'string') {
+                try { transData = JSON.parse(transData); } catch(e) {}
+            }
+            if (typeof accData === 'string') {
+                try { accData = JSON.parse(accData); } catch(e) {}
+            }
+
+            // 4. LocalStorage වෙත Save කිරීම (String ලෙස)
+            if(transData) localStorage.setItem("transactions", typeof transData === 'object' ? JSON.stringify(transData) : transData);
+            if(accData) localStorage.setItem("accounts", typeof accData === 'object' ? JSON.stringify(accData) : accData);
+            if(hiddenData) localStorage.setItem("hidden_accounts", typeof hiddenData === 'object' ? JSON.stringify(hiddenData) : hiddenData);
+
+            // 5. අවසන් කිරීම
+            fixDataIntegrity(); 
+            showAlert("Success", "Restored Successfully! Reloading..."); 
             setTimeout(() => location.reload(), 2000);
-        } catch(e) { showAlert("Error", "Restore Failed!"); }
+
+        } catch(e) { 
+            console.error(e); 
+            showAlert("Error", "Restore Failed! Invalid Format."); 
+        }
     });
 }
+
+
+
+
 
 function downloadBackup() {
     let d={accounts:localStorage.getItem("accounts"), transactions:localStorage.getItem("transactions"), hidden_accounts:localStorage.getItem("hidden_accounts")};
@@ -769,30 +636,21 @@ function restoreBackup(i) {
 }
 
 // =========================================
-// 8. ACCOUNTS VIEW & LOGIC (UPDATED WITH SEARCH)
+// 8. ACCOUNTS VIEW & LOGIC (WITH SEARCH)
 // =========================================
-function initAccountScreen() {
-    let t = document.getElementById("accTypeSelect");
-    let y = document.getElementById("yearSelect");
-    
-    // Dropdowns Reset
-    t.innerHTML = "";
-    y.innerHTML = "";
-    
-    accTypes.forEach(x => t.innerHTML += `<option>${x}</option>`);
-    for (let i = 2024; i <= 2050; i++) {
-        y.innerHTML += `<option ${i == new Date().getFullYear() ? 'selected' : ''}>${i}</option>`;
-    }
-    
-    document.getElementById("monthSelect").value = new Date().getMonth() + 1;
-    updateAccountFilterList();
 
-    // ✅ මේ කොටස තමයි අලුතෙන් එකතු වුනේ (Search Listener)
-    let searchInput = document.getElementById("ledgerSearchInput");
-    if (searchInput) {
-        // පරණ listeners ඉවත් කර අලුත් එකක් දැමීම (Duplicate වළක්වයි)
-        searchInput.removeEventListener("keyup", showAccountDetails);
-        searchInput.addEventListener("keyup", showAccountDetails);
+function initAccountScreen() {
+    let t=document.getElementById("accTypeSelect"), y=document.getElementById("yearSelect"); t.innerHTML=""; y.innerHTML="";
+    accTypes.forEach(x=>t.innerHTML+=`<option>${x}</option>`);
+    for(let i=2024;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
+    document.getElementById("monthSelect").value=new Date().getMonth()+1; 
+    updateAccountFilterList();
+    
+    // Search Listener
+    let searchBox = document.getElementById("ledgerSearchInput");
+    if(searchBox) {
+        searchBox.removeEventListener("keyup", showAccountDetails); // Avoid duplicates
+        searchBox.addEventListener("keyup", showAccountDetails);
     }
 }
 
@@ -802,138 +660,97 @@ function updateAccountFilterList() {
     if(all[t]) all[t].forEach(n=>{ if(!h.includes(n)) s.innerHTML+=`<option>${n}</option>`; });
 }
 
-
-
-
 function showAccountDetails() {
-    let ac = document.getElementById("accSelect").value;
-    let yr = document.getElementById("yearSelect").value;
-    let mo = document.getElementById("monthSelect").value;
-    let type = document.getElementById("accTypeSelect").value;
+    let ac=document.getElementById("accSelect").value, yr=document.getElementById("yearSelect").value, mo=document.getElementById("monthSelect").value;
+    let type=document.getElementById("accTypeSelect").value;
     let monthlyMode = document.getElementById("accModeSwitch").checked;
-
-    // ✅ Search Text එක ලබා ගැනීම
+    
+    // Search Text
     let searchEl = document.getElementById("ledgerSearchInput");
     let searchText = searchEl ? searchEl.value.toLowerCase().trim() : "";
 
-    if (!ac) return;
-
+    if(!ac) return; 
     document.getElementById("tAccTitle").innerText = ac + (monthlyMode ? " (Monthly Mode)" : "");
-    let dr = document.getElementById("drContent");
-    let cr = document.getElementById("crContent");
+    let dr=document.getElementById("drContent"), cr=document.getElementById("crContent"); dr.innerHTML=""; cr.innerHTML="";
+    let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
+    let td=0, tc=0, ob=0;
     
-    dr.innerHTML = "";
-    cr.innerHTML = "";
-
-    let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
-    let td = 0, tc = 0, ob = 0;
-
-    // 1. OPENING BALANCE CALCULATION
     let isNominal = (type === "ආදායම්" || type === "වියදම්");
-    if (monthlyMode && isNominal) {
-        ob = 0;
-    } else {
-        tr.forEach(x => {
-            let tY = parseInt(x.year), tM = parseInt(x.month), sY = parseInt(yr), sM = parseInt(mo);
-            if (tY < sY || (tY == sY && tM < sM)) {
-                let a = parseFloat(x.amount);
-                if (x.dr_acc.trim() == ac) ob += a;
-                if (x.cr_acc.trim() == ac) ob -= a;
-            }
+    if (monthlyMode && isNominal) { ob = 0; } 
+    else {
+        tr.forEach(x => { 
+            let tY=parseInt(x.year), tM=parseInt(x.month), sY=parseInt(yr), sM=parseInt(mo);
+            if (tY < sY || (tY == sY && tM < sM)) { 
+                let a=parseFloat(x.amount); if (x.dr_acc.trim()==ac) ob+=a; if (x.cr_acc.trim()==ac) ob-=a; 
+            } 
         });
-        
-        // Capital Account Logic
         if (monthlyMode && type === "හිමිකම්") {
             let retained = 0;
             tr.forEach(x => {
-                let tY = parseInt(x.year), tM = parseInt(x.month), sY = parseInt(yr), sM = parseInt(mo);
+                let tY=parseInt(x.year), tM=parseInt(x.month), sY=parseInt(yr), sM=parseInt(mo);
                 if (tY < sY || (tY == sY && tM < sM)) {
-                    let a = parseFloat(x.amount);
-                    if (x.cr_type === "ආදායම්") retained += a;
-                    if (x.dr_type === "ආදායම්") retained -= a;
-                    if (x.dr_type === "වියදම්") retained -= a;
-                    if (x.cr_type === "වියදම්") retained += a;
+                    let a=parseFloat(x.amount);
+                    if (x.cr_type === "ආදායම්") retained += a; if (x.dr_type === "ආදායම්") retained -= a;
+                    if (x.dr_type === "වියදම්") retained -= a; if (x.cr_type === "වියදම්") retained += a;
                 }
             });
             ob -= retained;
         }
     }
 
-    // Show B/F Row
-    if (ob != 0) {
-        let d = document.createElement("div");
-        d.className = "t-item t-bf";
-        d.innerText = "B/F : " + Math.abs(ob).toFixed(2);
-        if (ob > 0) { dr.appendChild(d); td += ob; } 
-        else { cr.appendChild(d); tc += Math.abs(ob); }
+    if(ob!=0) { 
+        let d=document.createElement("div"); d.className="t-item t-bf"; 
+        d.innerText="B/F : "+Math.abs(ob).toFixed(2); 
+        if(ob>0){dr.appendChild(d); td+=ob;} else{cr.appendChild(d); tc+=Math.abs(ob);} 
     }
 
-    // 2. DISPLAY TRANSACTIONS (WITH SEARCH)
-    tr.forEach(x => {
-        if (x.year == yr && x.month == mo) {
-            
-            // ✅ Search Logic එක මෙතනට එකතු කර ඇත
+    tr.forEach(x=>{ 
+        if(x.year==yr && x.month==mo) { 
             let contraName = "";
             if (x.dr_acc.trim() == ac) contraName = x.cr_acc;
             else if (x.cr_acc.trim() == ac) contraName = x.dr_acc;
-            else return; // මේ ගිණුමට අදාළ නැත්නම් පෙන්වන්න එපා
-
-            let isMatch = true;
-            if (searchText !== "") {
+            else return; 
+            
+            let searchMatch = true;
+            if (searchText) {
                 let descStr = (x.desc || "").toLowerCase();
                 let dateStr = x.date.toLowerCase();
                 let amtStr = x.amount.toString();
                 let contraStr = contraName.toLowerCase();
 
-                // විස්තරය, දිනය, මුදල හෝ අනෙක් ගිණුමේ නම තුළ සෙවුම් වචනය තිබේදැයි බලයි
                 if (!descStr.includes(searchText) && 
                     !dateStr.includes(searchText) && 
-                    !contraStr.includes(searchText) && 
+                    !contraStr.includes(searchText) &&
                     !amtStr.includes(searchText)) {
-                    isMatch = false;
+                    searchMatch = false;
                 }
             }
 
-            if (isMatch) {
-                let a = parseFloat(x.amount);
-                let d = document.createElement("div");
-                d.className = "t-item";
-                d.onclick = () => showAlert("Details", x.desc || "No Description");
-
-                if (x.dr_acc.trim() == ac) {
-                    d.innerText = `${x.date} | ${x.cr_acc} : ${a}`;
-                    dr.appendChild(d);
-                    td += a;
-                } else if (x.cr_acc.trim() == ac) {
-                    d.innerText = `${x.date} | ${x.dr_acc} : ${a}`;
-                    cr.appendChild(d);
-                    tc += a;
-                }
+            if (searchMatch) {
+                let a=parseFloat(x.amount); let d=document.createElement("div"); d.className="t-item"; 
+                d.onclick=()=>showAlert("Details", x.desc); 
+                if(x.dr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.cr_acc} : ${a}`; dr.appendChild(d); td+=a; }
+                else if(x.cr_acc.trim()==ac){ d.innerText=`${x.date} | ${x.dr_acc} : ${a}`; cr.appendChild(d); tc+=a; } 
             }
-        }
+        } 
     });
 
-    // 3. FINAL TOTALS
-    document.getElementById("drTotal").innerText = td.toFixed(2);
-    document.getElementById("crTotal").innerText = tc.toFixed(2);
-    
-    let b = td - tc;
-    let bb = document.getElementById("finalBalanceBox");
-    bb.innerText = "Balance c/d: " + Math.abs(b).toFixed(2) + (b >= 0 ? " (Dr)" : " (Cr)");
-    bb.style.backgroundColor = b >= 0 ? "#4CAF50" : "#F44336";
+    document.getElementById("drTotal").innerText=td.toFixed(2); document.getElementById("crTotal").innerText=tc.toFixed(2);
+    let b=td-tc, bb=document.getElementById("finalBalanceBox"); 
+    bb.innerText="Balance c/d: "+Math.abs(b).toFixed(2) + (b>=0?" (Dr)":" (Cr)");
+    bb.style.backgroundColor=b>=0?"#4CAF50":"#F44336";
 }
 
-
-
-
-
 // =========================================
-// 9. FULL REPORT (SUMMARY)
+// 9. REPORTS
 // =========================================
+
 function initReportsScreen() {
     let y=document.getElementById("repYear"); y.innerHTML=""; for(let i=2024;i<=2050;i++) y.innerHTML+=`<option ${i==new Date().getFullYear()?'selected':''}>${i}</option>`;
     document.getElementById("repMonth").value=new Date().getMonth()+1;
 }
+
+
 
 function generateReport() {
     let sY = parseInt(document.getElementById("repYear").value);
@@ -1100,9 +917,10 @@ function generateReport() {
     output.innerHTML = html;
 }
 
-// =========================================
-// 10. CHARTS
-// =========================================
+
+
+
+
 function loadCharts() {
     let mode = parseInt(document.getElementById("chartModeSelect").value);
     let sY = parseInt(document.getElementById("repYear").value);
@@ -1111,7 +929,6 @@ function loadCharts() {
     let container = document.getElementById("chartsContainer");
     container.innerHTML = "";
 
-    // Data Processing
     let totInc=0, totExp=0, totAsset=0, totLiab=0;
     let trendNet=[], labels=[], trendAsset=[];
     let mapExp={};
@@ -1151,7 +968,8 @@ function loadCharts() {
 
 function updateFontPreview(v) { let s=v/10; document.body.style.zoom=s; document.getElementById("fontStatus").innerText="Scale: "+s+"x"; }
 function saveFontSettings() { localStorage.setItem("app_scale", document.getElementById("fontSlider").value); showAlert("Success","Saved!"); }
-function showAlert(title, message, isConfirm = false, onYes = null) {
+
+function showAlert(title, message, isConfirm, onYes) {
     const modal = document.getElementById("customAlert");
     document.getElementById("alertTitle").innerText = title; document.getElementById("alertMessage").innerText = message;
     const btnOk = document.getElementById("btnAlertOk"); const btnCancel = document.getElementById("btnAlertCancel");
@@ -1159,211 +977,326 @@ function showAlert(title, message, isConfirm = false, onYes = null) {
     else { btnCancel.style.display = "none"; btnOk.innerText = "OK"; btnOk.onclick = () => modal.style.display = "none"; }
     modal.style.display = "flex";
 }
-function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
-function printReport() { alert("Print PDF is optimized for Android App. On web, use browser Print (Ctrl+P)."); }
 
-// Advanced Settings Helpers
+function closeCustomAlert() { document.getElementById("customAlert").style.display = "none"; }
+function printReport() { alert("Print PDF is Android Only."); }
 function initNewSettingsScreen() { renderTodayTransactions(); }
 function openHideAccountsDialog() { document.getElementById("hideAccModal").style.display="flex"; filterHideList(); }
+
 function filterHideList() {
     let s=document.getElementById("accSearch").value.toLowerCase(), l=document.getElementById("hideAccList"); l.innerHTML="";
     let all=JSON.parse(localStorage.getItem("accounts")||"{}"), h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
-    let flat=[]; Object.keys(all).forEach(k=>all[k].forEach(a=>flat.push(a))); flat.sort();
-    flat.forEach(a=>{
-        if(a.toLowerCase().includes(s)) {
-            let i=document.createElement("div"); i.style.padding="10px"; i.style.borderBottom="1px solid #eee";
-            i.innerHTML=`<label style="display:flex;align-items:center;"><input type="checkbox" value="${a}" ${h.includes(a)?"checked":""} onchange="toggleHiddenAccount(this)"><span style="margin-left:10px;">${a}</span></label>`;
-            l.appendChild(i);
+    Object.keys(all).forEach(k=>all[k].forEach(a=>{ if(a.toLowerCase().includes(s)) l.innerHTML+=`<div><input type="checkbox" value="${a}" ${h.includes(a)?"checked":""} onchange="toggleHiddenAccount(this)"> ${a}</div>`; }));
+}
+
+function toggleHiddenAccount(cb) { let h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]"); if(cb.checked) h.push(cb.value); else h=h.filter(x=>x!==cb.value); localStorage.setItem("hidden_accounts",JSON.stringify(h)); }
+function saveHiddenAccounts() { showAlert("Success","Saved!"); document.getElementById("hideAccModal").style.display="none"; }
+
+
+
+// =========================================
+// UPDATE 1: ADD EDIT BUTTON TO LIST
+// =========================================
+function renderTodayTransactions() { 
+    let l = document.getElementById("todayTransList");
+    let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
+    
+    // NewSettings screen එකේ Date Picker එකේ අගය ගැනීම
+    let datePicker = document.getElementById("manageTransDate");
+    let selectedDate = datePicker ? datePicker.value : getLocalTodayDate();
+
+    if(!l) return;
+    
+    l.innerHTML = ""; 
+    let found = false;
+
+    tr.forEach((t, i) => { 
+        // දිනය ගැලපේ නම් පමණක් පෙන්වන්න
+        if (t.date === selectedDate) {
+            found = true;
+            l.innerHTML += `
+            <div style="background:white; padding:12px; margin-bottom:8px; border-radius:8px; border-left:4px solid #009688; box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span style="font-weight:bold; color:#00796B;">Rs. ${parseFloat(t.amount).toFixed(2)}</span>
+                    <span style="font-size:12px; color:#555;">${t.desc || ''}</span>
+                </div>
+                <div style="font-size:12px; color:#757575;">
+                    Dr: ${t.dr_acc} | Cr: ${t.cr_acc}
+                </div>
+                <div style="margin-top:8px; text-align:right;">
+                    <button class="mini-btn" style="width:auto; color:#2196F3; border-color:#2196F3; margin-right:5px;" onclick="openEditModal(${i})">Edit ✏️</button>
+                    <button class="mini-btn" style="width:auto; color:#F44336; border-color:#F44336;" onclick="deleteTransaction(${i})">Del 🗑️</button>
+                </div>
+            </div>`; 
         }
     });
-}
-function toggleHiddenAccount(cb) {
-    let a=cb.value, h=JSON.parse(localStorage.getItem("hidden_accounts")||"[]");
-    if(cb.checked) { if(!h.includes(a)) h.push(a); } else { h=h.filter(x=>x!==a); }
-    localStorage.setItem("hidden_accounts", JSON.stringify(h));
-}
-function saveHiddenAccounts() { showAlert("Success","Saved!"); document.getElementById("hideAccModal").style.display="none"; }
-function renderTodayTransactions() {
-    let l=document.getElementById("todayTransList"); l.innerHTML="";
-    let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
-    let today = getLocalTodayDate(); 
-    let list=tr.map((t,i)=>({...t,idx:i})).filter(t=>t.date===today);
-    if(list.length==0) { l.innerHTML="<p style='text-align:center;color:#999;'>No transactions today.</p>"; return; }
-    list.forEach(t=>{
-        let c=document.createElement("div"); c.style.cssText="background:white;padding:10px;margin-bottom:10px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);";
-        c.innerHTML=`<div style="display:flex;justify-content:space-between;font-weight:bold;"><span style="color:#006064;">${t.desc||"No Desc"}</span><span style="color:#004D40;">Rs. ${t.amount}</span></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:5px;"><span style="color:#D32F2F;">Dr: ${t.dr_acc}</span><span style="color:#388E3C;">Cr: ${t.cr_acc}</span></div><button onclick="deleteTransaction(${t.idx})" style="margin-top:5px;background:#FFEBEE;color:#D32F2F;border:none;padding:5px 10px;border-radius:4px;font-size:11px;">Delete 🗑️</button>`;
-        l.appendChild(c);
-    });
-}
-function deleteTransaction(idx) {
-    showAlert("Confirm", "Delete?", true, function() {
-        let tr=JSON.parse(localStorage.getItem("transactions")||"[]");
-        tr.splice(idx,1);
-        localStorage.setItem("transactions", JSON.stringify(tr)); 
-        renderTodayTransactions(); showAlert("Success","Deleted!");
-    });
-}
 
-// ==========================================
-// 11. BUDGET LIMITS LOGIC (FIXED)
-// ==========================================
-
-function initLimitsScreen() {
-    let container = document.getElementById("limitsContainer");
-    container.innerHTML = "";
-    
-    let accounts = JSON.parse(localStorage.getItem("accounts") || "{}");
-    let limits = JSON.parse(localStorage.getItem("limit_data") || "{}");
-    let expAccs = accounts["වියදම්"] || [];
-
-    if(expAccs.length === 0) {
-        container.innerHTML = "<p>වියදම් ගිණුම් නොමැත.</p>";
-        return;
+    if (!found) {
+        l.innerHTML = "<p style='text-align:center;color:#888;margin-top:10px;'>No transactions found for this date.</p>";
     }
-
-    expAccs.forEach(acc => {
-        let card = document.createElement("div");
-        card.className = "limit-card";
-        
-        // IDs for inputs
-        let idD = `lim_daily_${acc}`;
-        let idW = `lim_weekly_${acc}`;
-        let idM = `lim_monthly_${acc}`;
-        
-        // HTML Structure
-        card.innerHTML = `
-            <h4>${acc}</h4>
-            <div class="limit-row">
-                <label>Daily:</label>
-                <input type="number" id="${idD}" placeholder="No Limit" value="${limits[idD] || ''}">
-            </div>
-            <div class="limit-row">
-                <label>Weekly:</label>
-                <input type="number" id="${idW}" placeholder="No Limit" value="${limits[idW] || ''}">
-            </div>
-            <div class="limit-row">
-                <label>Monthly:</label>
-                <input type="number" id="${idM}" placeholder="No Limit" value="${limits[idM] || ''}">
-            </div>
-        `;
-        container.appendChild(card);
-    });
 }
 
-function saveLimits() {
+// Date Picker එක වෙනස් කරන විට List එක Refresh වීමට මෙය එක් කරන්න
+// (මෙය script.js එකේ අගටම දැමුවත් කමක් නැත)
+function loadTodayTransactions() {
+    renderTodayTransactions();
+}
+
+
+
+
+
+
+
+
+function deleteTransaction(idx) { showAlert("Confirm","Delete?",true,()=>{ let tr=JSON.parse(localStorage.getItem("transactions")||"[]"); tr.splice(idx,1); localStorage.setItem("transactions",JSON.stringify(tr)); renderTodayTransactions(); }); }
+
+
+
+
+// =========================================
+// UPDATE 2: EDIT TRANSACTION LOGIC
+// =========================================
+
+
+// =========================================
+// UPDATE: EDIT LOGIC WITH TYPE FILTER
+// =========================================
+let editingIndex = -1;
+
+function openEditModal(idx) {
+    let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
+    let t = tr[idx];
+    editingIndex = idx;
+
+    document.getElementById("editTransId").value = idx;
+    document.getElementById("editTransAmt").value = t.amount;
+    document.getElementById("editTransDesc").value = t.desc || "";
+    
+    // Select Elements
+    let drTypeSelect = document.getElementById("editTransDrType");
+    let crTypeSelect = document.getElementById("editTransCrType");
+    let drAccSelect = document.getElementById("editTransDr");
+    let crAccSelect = document.getElementById("editTransCr");
+
+    // 1. Populate Types
+    drTypeSelect.innerHTML = ""; crTypeSelect.innerHTML = "";
+    accTypes.forEach(type => {
+        drTypeSelect.add(new Option(type, type));
+        crTypeSelect.add(new Option(type, type));
+    });
+
+    // 2. Set Selected Types (Use saved type OR auto-detect)
+    let all = JSON.parse(localStorage.getItem("accounts") || "{}");
+    let findType = (name) => {
+        for(let k in all) if(all[k].includes(name)) return k;
+        return accTypes[0]; // Default
+    };
+
+    // පරණ දත්ත වල Type එක නැත්නම් නම මගින් සොයාගැනීම
+    let currentDrType = t.dr_type || findType(t.dr_acc);
+    let currentCrType = t.cr_type || findType(t.cr_acc);
+
+    drTypeSelect.value = currentDrType;
+    crTypeSelect.value = currentCrType;
+
+    // 3. Populate Accounts based on Type & Set Value
+    updateEditAccList('dr'); // Fill Dr Accounts
+    updateEditAccList('cr'); // Fill Cr Accounts
+
+    // ගිණුම හරියටම select වී ඇත්දැයි බැලීම (Timeout එකක් දාන්නේ List එක render වෙන්න කාලය දීමට)
+    setTimeout(() => {
+        drAccSelect.value = t.dr_acc;
+        crAccSelect.value = t.cr_acc;
+    }, 50);
+    
+    document.getElementById("editTransModal").style.display = "flex";
+}
+
+function closeEditModal() { 
+    document.getElementById("editTransModal").style.display = "none"; 
+}
+
+function saveEditedTransaction() {
+    let tr = JSON.parse(localStorage.getItem("transactions") || "[]");
+    let idx = editingIndex;
+    
+    if(idx > -1 && tr[idx]) {
+        let amt = document.getElementById("editTransAmt").value;
+        let desc = document.getElementById("editTransDesc").value;
+        
+        let drType = document.getElementById("editTransDrType").value;
+        let drAcc = document.getElementById("editTransDr").value;
+        
+        let crType = document.getElementById("editTransCrType").value;
+        let crAcc = document.getElementById("editTransCr").value;
+        
+        if(!amt || !drAcc || !crAcc) { alert("Please fill amount and select accounts"); return; }
+        
+        // Update Data
+        tr[idx].amount = amt;
+        tr[idx].desc = desc;
+        
+        tr[idx].dr_type = drType; // Save Type explicitly
+        tr[idx].dr_acc = drAcc;
+        
+        tr[idx].cr_type = crType; // Save Type explicitly
+        tr[idx].cr_acc = crAcc;
+        
+        localStorage.setItem("transactions", JSON.stringify(tr));
+        
+        closeEditModal();
+        renderTodayTransactions();
+        showAlert("Success", "Transaction Updated! ✅");
+        
+        if(auth && auth.currentUser) performCloudBackup(auth.currentUser.uid);
+    }
+}
+
+
+
+
+
+// ==========================================
+// 11. BUDGET LIMITS LOGIC
+// ==========================================
+
+function initLimitsScreen() { 
+    let container = document.getElementById("limitsContainer"); container.innerHTML = "";
     let accounts = JSON.parse(localStorage.getItem("accounts") || "{}");
-    let limits = {};
+    let limits = JSON.parse(localStorage.getItem("limit_data") || "{}");
     let expAccs = accounts["වියදම්"] || [];
 
     expAccs.forEach(acc => {
-        let valD = document.getElementById(`lim_daily_${acc}`).value;
-        let valW = document.getElementById(`lim_weekly_${acc}`).value;
-        let valM = document.getElementById(`lim_monthly_${acc}`).value;
-
-        if(valD) limits[`lim_daily_${acc}`] = valD;
-        if(valW) limits[`lim_weekly_${acc}`] = valW;
-        if(valM) limits[`lim_monthly_${acc}`] = valM;
+        let idD = `lim_daily_${acc}`, idW = `lim_weekly_${acc}`, idM = `lim_monthly_${acc}`;
+        container.innerHTML += `<div class="limit-card"><h4>${acc}</h4><div class="limit-row"><label>Daily:</label><input type="number" id="${idD}" value="${limits[idD]||''}"></div><div class="limit-row"><label>Weekly:</label><input type="number" id="${idW}" value="${limits[idW]||''}"></div><div class="limit-row"><label>Monthly:</label><input type="number" id="${idM}" value="${limits[idM]||''}"></div></div>`;
     });
+} 
 
-    localStorage.setItem("limit_data", JSON.stringify(limits));
-    alert("Limits Saved Successfully! ✅");
-    navigateTo('settings');
+function saveLimits() { 
+    let limits = {}, accounts = JSON.parse(localStorage.getItem("accounts") || "{}");
+    let expAccs = accounts["වියදම්"] || [];
+    expAccs.forEach(acc => {
+        let vD = document.getElementById(`lim_daily_${acc}`).value, vW = document.getElementById(`lim_weekly_${acc}`).value, vM = document.getElementById(`lim_monthly_${acc}`).value;
+        if(vD) limits[`lim_daily_${acc}`]=vD; if(vW) limits[`lim_weekly_${acc}`]=vW; if(vM) limits[`lim_monthly_${acc}`]=vM;
+    });
+    localStorage.setItem("limit_data", JSON.stringify(limits)); alert("Saved"); navigateTo('settings');
 }
 
-// ✅ FIXED ALERT FUNCTION (Matches Local Time)
 function renderBudgetAlerts() {
-    let container = document.getElementById("budgetAlertContainer");
-    if(!container) return;
-    container.innerHTML = "";
-
-    let limits = JSON.parse(localStorage.getItem("limit_data") || "{}");
-    let trans = JSON.parse(localStorage.getItem("transactions") || "[]");
-    
-    // ✅ Use getLocalTodayDate helper to match saved transaction format
+    let container = document.getElementById("budgetAlertContainer"); if(!container) return; container.innerHTML = "";
+    let limits = JSON.parse(localStorage.getItem("limit_data")||"{}"), trans = JSON.parse(localStorage.getItem("transactions")||"[]");
     let todayStr = getLocalTodayDate();
-
-    let now = new Date();
-    let curMonth = (now.getMonth() + 1).toString();
-    let curYear = now.getFullYear().toString();
-    let curWeek = getWeekNumber(now); 
-
-    // Calculate Spending
-    let spentDay = {}, spentWeek = {}, spentMonth = {};
-    let relevantAccs = new Set();
+    let hasAlerts = false;
+    let spentDay={}, spentWeek={}, spentMonth={};
+    let now = new Date(); let curMonth=(now.getMonth()+1).toString(), curYear=now.getFullYear().toString(), curWeek=getWeekNumber(now);
 
     trans.forEach(t => {
         if(t.dr_type === "වියදම්") {
-            let acc = t.dr_acc;
-            let amt = parseFloat(t.amount);
-            
-            // Fix Date Parsing for Weekly Check
-            let tDate = new Date(t.date); 
-            
-            relevantAccs.add(acc);
-
-            // Daily Check (Now matches correctly)
-            if(t.date === todayStr) {
-                spentDay[acc] = (spentDay[acc] || 0) + amt;
-            }
-
-            // Monthly Check
+            let acc = t.dr_acc, amt = parseFloat(t.amount), tDate = new Date(t.date);
+            if(t.date === todayStr) spentDay[acc] = (spentDay[acc] || 0) + amt;
             if(t.year == curYear && t.month == curMonth) spentMonth[acc] = (spentMonth[acc] || 0) + amt;
-
-            // Weekly Check
             if(t.year == curYear && getWeekNumber(tDate) == curWeek) spentWeek[acc] = (spentWeek[acc] || 0) + amt;
         }
     });
 
-    // Generate Alerts
-    let hasAlerts = false;
-    let html = "";
-
-    relevantAccs.forEach(acc => {
-        let types = ["daily", "weekly", "monthly"];
-        let labels = ["Today", "This Week", "This Month"];
-        let maps = [spentDay, spentWeek, spentMonth];
-        let mapKeys = [`lim_daily_${acc}`, `lim_weekly_${acc}`, `lim_monthly_${acc}`];
-
-        for(let k=0; k<3; k++) {
-            let limitVal = limits[mapKeys[k]];
-            if(limitVal) {
-                let limit = parseFloat(limitVal);
-                let spent = maps[k][acc] || 0;
-                
-                if(limit > 0) {
-                    let pct = (spent / limit) * 100;
-                    if(pct >= 75) {
-                        hasAlerts = true;
-                        let isRed = pct >= 100;
-                        let diff = Math.abs(spent - limit).toFixed(2);
-                        let cls = isRed ? "alert-critical" : "alert-warning";
-                        let icon = isRed ? "🚨" : "⚠️";
-                        let msg = isRed ? `Exceeded by ${diff}` : `Remaining: ${diff} (${Math.round(pct)}% used)`;
-
-                        html += `
-                        <div class="alert-card ${cls}">
-                            <span class="alert-title">${icon} ${acc} (${labels[k]})</span>
-                            <span class="alert-desc">${msg}</span>
-                        </div>`;
-                    }
-                }
-            }
+    Object.keys(limits).forEach(key => {
+        let acc = key.split("_")[2], type = key.split("_")[1], limit = parseFloat(limits[key]);
+        let spent = (type=="daily"?spentDay[acc]:(type=="weekly"?spentWeek[acc]:spentMonth[acc]))||0;
+        if(limit>0) {
+            let pct = (spent/limit)*100;
+            if(pct>=75) { hasAlerts=true; container.innerHTML += `<div class="alert-card ${pct>=100?'alert-critical':'alert-warning'}"><span class="alert-title">${acc} (${type})</span><span class="alert-desc">${pct>=100?'Exceeded':'Remaining'}: ${Math.abs(limit-spent).toFixed(2)}</span></div>`; }
         }
     });
+    container.style.display = hasAlerts ? "block" : "none";
+}
 
-    if(hasAlerts) {
-        container.innerHTML = `<h4 style="margin-bottom:10px; color:#666; font-size:12px;">BUDGET ALERTS</h4>` + html;
-        container.style.display = "block";
+function getWeekNumber(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7)); var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1)); return Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7); }
+
+// =========================================
+// 12. CALCULATOR LOGIC (Consolidated)
+// =========================================
+
+let calcExpression = "";
+
+function openCalculator(targetInputId) {
+    if (!targetInputId) targetInputId = "edCommonAmt";
+    currentCalcTargetId = targetInputId; // Save the ID globally
+    calcExpression = "";
+    
+    let display = document.getElementById("calcDisplay");
+    if(display) {
+        display.innerText = "0";
+        document.getElementById("calcModal").style.display = "flex";
     } else {
-        container.style.display = "none";
+        console.error("Calculator display element not found!");
     }
 }
 
-// Helper: Get Week Number
-function getWeekNumber(d) {
-    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-    var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-    var weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
-    return weekNo;
+function calcCmd(val) {
+    let display = document.getElementById("calcDisplay");
+    
+    if (val === 'C') {
+        calcExpression = "";
+        display.innerText = "0";
+    } else if (val === 'back') {
+        calcExpression = calcExpression.slice(0, -1);
+        display.innerText = calcExpression || "0";
+    } else {
+        let lastChar = calcExpression.slice(-1);
+        if (['+', '-', '*', '/', '.'].includes(val) && ['+', '-', '*', '/', '.'].includes(lastChar)) {
+            return;
+        }
+        calcExpression += val;
+        display.innerText = calcExpression;
+    }
 }
+
+function calcApply() {
+    try {
+        let result = new Function('return ' + calcExpression)();
+        result = Math.round(result * 100) / 100;
+        
+        if(currentCalcTargetId) {
+            let targetField = document.getElementById(currentCalcTargetId);
+            if(targetField) {
+                targetField.value = result;
+                if(typeof updateUIMode === "function") updateUIMode();
+            } else {
+                console.error("Target Input not found: " + currentCalcTargetId);
+            }
+        }
+        document.getElementById("calcModal").style.display = "none";
+    } catch (e) {
+        document.getElementById("calcDisplay").innerText = "Error";
+        calcExpression = "";
+    }
+}
+
+
+
+// =========================================
+// HELPER: UPDATE EDIT MODAL LISTS
+// =========================================
+function updateEditAccList(side) {
+    let typeEl = document.getElementById(side === 'dr' ? "editTransDrType" : "editTransCrType");
+    let accEl = document.getElementById(side === 'dr' ? "editTransDr" : "editTransCr");
+    
+    let type = typeEl.value;
+    accEl.innerHTML = "";
+    
+    let all = JSON.parse(localStorage.getItem("accounts") || "{}");
+    let h = JSON.parse(localStorage.getItem("hidden_accounts") || "[]");
+    
+    if(all[type]) {
+        all[type].forEach(n => {
+            // Edit කරන විට Hidden ගිණුම් පවා පෙන්විය යුතුය (Select කිරීමට)
+            let opt = document.createElement("option"); 
+            opt.value = n; 
+            opt.innerText = n; 
+            accEl.appendChild(opt);
+        });
+    }
+}
+
+
