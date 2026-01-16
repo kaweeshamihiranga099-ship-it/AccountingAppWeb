@@ -415,12 +415,16 @@ function updateUIMode() {
     }
 }
 
+
+
 function saveTransaction() {
+    // 1. හර සහ බැර පේළි ගණන සහ වටිනාකම් ලබා ගැනීම
     let isSplit = (drRows.length > 1 || crRows.length > 1);
     let totDr = 0, totCr = 0;
     let commonBox = document.getElementById("edCommonAmt");
     let commonAmt = commonBox ? (parseFloat(commonBox.value) || 0) : 0;
 
+    // Totals Calculation
     if(isSplit) {
         drRows.forEach(r => { let v = parseFloat(r.amt.value); if(!isNaN(v)) totDr += v; });
         crRows.forEach(r => { let v = parseFloat(r.amt.value); if(!isNaN(v)) totCr += v; });
@@ -428,16 +432,20 @@ function saveTransaction() {
         totDr = commonAmt; totCr = commonAmt;
     }
 
+    // Auto-fill logic for single empty field in split mode
     if(drRows.length > 1 && crRows.length === 1 && totCr === 0) totCr = totDr;
     else if(crRows.length > 1 && drRows.length === 1 && totDr === 0) totDr = totCr;
 
-    if(Math.abs(totDr - totCr) > 0.01) { openErrorModal("හර සහ බැර වටිනාකම් සමාන නොවේ!"); return; }
+    // Validation (වටිනාකම් පරීක්ෂා කිරීම)
+    // Javascript Floating Point දෝෂ මග හැරීමට 0.001 වෙනසක් සලකමු
+    if(Math.abs(totDr - totCr) > 0.001) { openErrorModal("හර සහ බැර වටිනාකම් සමාන නොවේ! (Dr: " + totDr + " | Cr: " + totCr + ")"); return; }
     if(totDr === 0) { openErrorModal("කරුණාකර වටිනාකමක් (Amount) ඇතුළත් කරන්න."); return; }
 
+    // Data Loading
     let trArray = JSON.parse(localStorage.getItem("transactions") || "[]");
     let desc = document.getElementById("edCommonDesc").value;
     let now = new Date();
-    let dateStr = getLocalTodayDate();
+    let dateStr = getLocalTodayDate(); // ඔබේ කේතයේ ඇති පරිදි
 
     let commonData = {
         year: now.getFullYear().toString(),
@@ -446,32 +454,98 @@ function saveTransaction() {
         desc: desc
     };
 
+    // --- SAVE LOGIC START ---
     if(isSplit) {
-        if(drRows.length >= crRows.length) {
-            let crType = crRows[0].type.value, crAcc = crRows[0].acc.value;
+        
+        // ✅ NEW LOGIC: Many-to-Many Handling (හර සහ බැර දෙපැත්තේම ගිණුම් 1 ට වඩා වැඩි නම්)
+        if (drRows.length > 1 && crRows.length > 1) {
+            
+            let crIndex = 0;
+            let crRem = parseFloat(crRows[0].amt.value) || 0; // පළමු බැර ගිණුමේ ශේෂය
+
+            // හර ගිණුම් එකින් එක ලූප් කිරීම
             drRows.forEach(dr => {
-                let amt = parseFloat(dr.amt.value) || 0;
-                if(amt > 0) trArray.push({ ...commonData, dr_type: dr.type.value, dr_acc: dr.acc.value, cr_type: crType, cr_acc: crAcc, amount: amt.toString() });
+                let drRem = parseFloat(dr.amt.value) || 0; // හර ගිණුමේ වටිනාකම
+
+                // මෙම හර ගිණුමේ මුදල පියවෙන තුරු බැර ගිණුම් වලින් අඩු කිරීම
+                while (drRem > 0.001 && crIndex < crRows.length) {
+                    let matchAmt = Math.min(drRem, crRem); // කුඩා වටිනාකම තෝරා ගැනීම
+
+                    if (matchAmt > 0) {
+                        trArray.push({ 
+                            ...commonData, 
+                            dr_type: dr.type.value, 
+                            dr_acc: dr.acc.value, 
+                            cr_type: crRows[crIndex].type.value, 
+                            cr_acc: crRows[crIndex].acc.value, 
+                            amount: matchAmt.toFixed(2) 
+                        });
+                    }
+
+                    drRem -= matchAmt;
+                    crRem -= matchAmt;
+
+                    // වත්මන් බැර ගිණුම ඉවර නම් ඊළඟ එකට මාරු වීම
+                    if (crRem < 0.001) {
+                        crIndex++;
+                        if (crIndex < crRows.length) {
+                            crRem = parseFloat(crRows[crIndex].amt.value) || 0;
+                        }
+                    }
+                }
             });
+
         } else {
-            let drType = drRows[0].type.value, drAcc = drRows[0].acc.value;
-            crRows.forEach(cr => {
-                let amt = parseFloat(cr.amt.value) || 0;
-                if(amt > 0) trArray.push({ ...commonData, dr_type: drType, dr_acc: drAcc, cr_type: cr.type.value, cr_acc: cr.acc.value, amount: amt.toString() });
-            });
+            // EXISTING LOGIC: One-to-Many or Many-to-One
+            if(drRows.length >= crRows.length) {
+                // හර ගිණුම් කිහිපයක් -> එක බැර ගිණුමක්
+                let crType = crRows[0].type.value, crAcc = crRows[0].acc.value;
+                drRows.forEach(dr => {
+                    let amt = parseFloat(dr.amt.value) || 0;
+                    if(amt > 0) trArray.push({ ...commonData, dr_type: dr.type.value, dr_acc: dr.acc.value, cr_type: crType, cr_acc: crAcc, amount: amt.toString() });
+                });
+            } else {
+                // බැර ගිණුම් කිහිපයක් -> එක හර ගිණුමක්
+                let drType = drRows[0].type.value, drAcc = drRows[0].acc.value;
+                crRows.forEach(cr => {
+                    let amt = parseFloat(cr.amt.value) || 0;
+                    if(amt > 0) trArray.push({ ...commonData, dr_type: drType, dr_acc: drAcc, cr_type: cr.type.value, cr_acc: cr.acc.value, amount: amt.toString() });
+                });
+            }
         }
+
     } else {
+        // Single Entry
         trArray.push({ ...commonData, dr_type: drRows[0].type.value, dr_acc: drRows[0].acc.value, cr_type: crRows[0].type.value, cr_acc: crRows[0].acc.value, amount: commonAmt.toString() });
     }
+    // --- SAVE LOGIC END ---
 
+    // Finalize
     localStorage.setItem("transactions", JSON.stringify(trArray));
     openSuccessModal();
-    renderBudgetAlerts(); 
+    if(typeof renderBudgetAlerts === "function") renderBudgetAlerts(); 
+    
+    // Clear Inputs
     if(commonBox) commonBox.value = "";
     document.getElementById("edCommonDesc").value = "";
-    initHomeScreen();
-    if(auth && auth.currentUser) performCloudBackup(auth.currentUser.uid);
+    
+    // Reset Rows (UI Reset Logic - ඔබේ කේතයේ initHomeScreen මගින් මෙය සිදුවේ යැයි සිතමි)
+    if(typeof initHomeScreen === "function") initHomeScreen();
+    
+    // Cloud Backup
+    if(typeof auth !== 'undefined' && auth.currentUser && typeof performCloudBackup === "function") {
+        performCloudBackup(auth.currentUser.uid);
+    }
 }
+
+
+
+
+
+
+
+
+
 
 function openSuccessModal() { document.getElementById("successModal").style.display = "flex"; }
 function closeSuccessModal() { document.getElementById("successModal").style.display = "none"; }
